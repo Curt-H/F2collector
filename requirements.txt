@@ -23,7 +23,7 @@ qrcode==8.0
 rich==13.9.3
 websockets-proxy==0.1.2
 websockets<13.0
-# 【解冻 2026-09-15】msToken/cookie 浏览器保活刷新（f2dl/token_refresh.py）
-# 及 fetch_user_post 的 Argus 403 浏览器降级通道（f2/apps/douyin/browser_fetch.py）
-# 运行时依赖。内核已下载（ms-playwright/firefox-1538）。
+# playwright：fetch_user_post 的 Firefox 浏览器通道
+# （f2/apps/douyin/browser_fetch.py）运行时依赖。
+# 内核已下载（ms-playwright/firefox-1538）。
 playwright==1.62.0

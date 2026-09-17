@@ -8,8 +8,9 @@ SecurityPlugin 风控网关,对无完整设备凭证的 httpx 请求按概率 40
 真正通过设备凭证校验(见 DouyinCrawler.__init__ 补丁注释);
 2026-09-15 风控收紧窗口内实测 8/8 全 403。
 
-本通道思路:与已冻结的 f2dl/token_refresh.py("访问首页等 Set-Cookie
-颁发 msToken",2026-09-11 实测 6 种组合均不颁发而冻结)本质不同——
+本通道思路:与已删除的 msToken 保活实验(token_refresh.py,"访问首页等
+Set-Cookie 颁发 msToken",2026-09-11 实测 6 种组合均不颁发,2026-09-17
+随死代码清理删除)本质不同——
 用 Playwright 驱动 Firefox 打开用户主页,由页面自身 JS 在真实浏览器
 环境(TLS/HTTP2/指纹全真)现场生成 msToken/a_bogus 并发起列表请求,
 Python 仅旁路拦截响应(page.on("response")),完全不参与签名与请求
@@ -254,7 +255,7 @@ def _collect_pages_sync(
         # 不覆盖 User-Agent:保持 Playwright Firefox 自身真实指纹
     )
     try:
-        # 基础反检测:抹掉 navigator.webdriver(同 f2dl/token_refresh.py)
+        # 基础反检测:抹掉 navigator.webdriver
         context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', "
             "{get: () => undefined})"

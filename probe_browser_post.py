@@ -6,7 +6,7 @@
 通过设备凭证校验。
 
 假设:真实浏览器里该接口由页面 JS 自行签名发起(msToken/a_bogus 在内存生成,
-不依赖 Set-Cookie 颁发 msToken——与已冻结 f2dl/token_refresh 的"等 cookie
+不依赖 Set-Cookie 颁发 msToken——与已删除的 msToken 保活实验(token_refresh.py)的"等 cookie
 颁发"思路本质不同),Python 只需旁路拦截响应即可拿到作品列表。
 
 通道(判定标准对应第 0 步计划):
@@ -134,7 +134,7 @@ def run_session(p, headless: bool, cookies: list, tag: str) -> dict:
             locale="zh-CN",
             # 不覆盖 User-Agent:让 playwright Firefox 使用自身真实指纹
         )
-        # 基础反检测:抹掉 navigator.webdriver(token_refresh.py 同款)
+        # 基础反检测:抹掉 navigator.webdriver
         context.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )

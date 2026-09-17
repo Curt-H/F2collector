@@ -7,7 +7,7 @@ A Douyin / Weibo media downloader built on top of [f2](https://github.com/Johnse
 - **Two platforms**: Douyin (10 modes) and Weibo (post); the f2 engine ships with the repo
 - **Media only**: no captions / covers / music / lyrics by default — just images and videos
 - **Flat layout**: no per-post folders; media files are archived directly under each author's directory
-- **Auto-generated configs**: task configs are built from f2's official defaults and persisted to `dy\conf\` and `wb\conf\`
+- **Auto-generated configs**: task configs are built from f2's official defaults and persisted to `dy\conf\`
 - **Incremental updates**: every task records a `last_run` timestamp; on Douyin the fetch window is narrowed to `last_run|today`, and already-downloaded items are skipped by the engine
 - **Automatic retries**: network failures re-run the whole task (resume + skip completed), up to 2 retries
 - **Weibo Live Photo**: built-in patch downloads both the static frame `.jpg` and the motion video `_live_N.mov` (not implemented upstream)
@@ -36,8 +36,8 @@ python dydl.py -p weibo  -u "https://weibo.com/u/1234567890" -M post
 python dydl.py -p douyin -u "<link>" -M post --gen-only   # generate config only
 ```
 
-- Task configs live in `dy\conf\<task>.yaml` / `wb\conf\<task>.yaml` — **re-running the same command performs an incremental update**
-- Downloads go to `Download\dy\` and `Download\wb\`
+- Task configs live in `dy\conf\<task>.yaml` — **re-running the same command performs an incremental update**
+- Downloads go to `Download\dy\`
 - Advanced options (download dir, naming, concurrency...) are available in the wizard's advanced submenu
 
 ## First run
@@ -51,7 +51,7 @@ python dydl.py -p douyin -u "<link>" -M post --gen-only   # generate config only
 |------|-------------|
 | `f2/` | Vendored f2 engine (with local patches, do not edit) |
 | `f2dl/` | The tool itself |
-| `dy\`, `wb\` | Runtime dirs: cookies, task configs (contain personal data — gitignored) |
+| `dy\` | Runtime dirs: cookies, task configs (contain personal data — gitignored) |
 | `Download\` | Download output |
 | `logs\` | f2 runtime logs (for troubleshooting) |
 
