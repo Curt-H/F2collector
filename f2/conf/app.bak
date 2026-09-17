@@ -1,0 +1,73 @@
+bark:
+  autoCopy: 1
+  badge: 1
+  body: ''
+  call: 0
+  copy: ''
+  group: "F2\u4E0B\u8F7D\u7EDF\u8BA1"
+  icon: https://f2.wiki/f2-logo-with-shadow.png
+  isArchive: 1
+  key: ''
+  level: active
+  mode: get
+  retry: 3
+  ringtones: 1
+  sound: birdsong
+  title: F2
+  token: ''
+  url: https://f2.wiki/
+  volume: 5
+douyin:
+  cookie: ''
+  lyric: true
+  max_connections: 5
+  max_counts: 0
+  max_retries: 5
+  max_tasks: 10
+  naming: '{create}_{desc}'
+  page_counts: 20
+  path: Download
+  timeout: 10
+tiktok:
+  cookie: ''
+  max_connections: 5
+  max_counts: 0
+  max_retries: 5
+  max_tasks: 5
+  naming: '{create}_{desc}'
+  page_counts: 5
+  path: Download
+  timeout: 10
+twitter:
+  cookie: ''
+  folderize: true
+  interval: all
+  max_connections: 5
+  max_counts: 0
+  max_retries: 5
+  max_tasks: 5
+  mode: one
+  naming: '{create}_{desc}'
+  page_counts: 20
+  path: Download
+  timeout: 10
+weibo:
+  cookie: SVB=_2AkMdwxcDf8NxqwFRnvkVz2ziZYl_zg3EieKrn-bYJRMxHRl-yT9xqlMPtRB6NkM57K5W99ydK9tBVBtlzdEybAV8wa2U;
+    SRT=D.QqHBTrs%21W3YZMFRtOeYoWrSNUeShPefp5cbTddoa5cVqMdbbN3HlIdHSNbHi5mYNUCsuPDbtVdYCSeMNAZSKTrrsirowJEEliGMbOsSZTrkiV4npibEKPbBKVZWBdA77%2AB.vAflW-P9Rc0lR-ykKDvnJqiQVbiRVPBtS%21r3J8sQVqbgVdWiMZ4siOzu4DbmKPWfOOBGNdEcQsB15%21WYMqHP4sPm5FWM;
+    SRF=1788844084; ALC=ALC-8gPLP7-1788844582-4-859644134-98f8b49381a4c9520606ac3362ca-2;
+    tid=01AV3xz9jmG8CpUtLRk-54LTMV8VmL0RbD5AbU9ABH3sWs; SCF=Ap5lgKd4jxqIw_ioOqx5NYH90yhImyQU_GFvsbwLKjmkatmC8p3EQID56l0SRqAo6kshRcFVSjl7dbTpR2mK2EM.;
+    SUB=_2A25Hm-p2DeRhGeFL7FUZ8izJwjuIHXVk2WO-rDV8PUNbmtAbLUbZkW9NfbuyyC2L_J0n3WNXMK2u285hjw7ykHO-;
+    SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9WFAJzVhyHH3qjXXS2ouRZo45JpX5KzhUgL.FoMfS0MReozf1KM2dJLoIpjLxK-L1hnLB-zLxK-L12qLBKBLxKqL1KqL12zt;
+    ALF=02_1791436582; SINAGLOBAL=4676446658712.502.1789095049396; ULV=1789095049412:1:1:1:4676446658712.502.1789095049396:;
+    WBPSESS=NI5tmsiRcfXGnErssJsJXI-m8vDJoxYTNVbAmJC8VOlz7eVh--oG93RG7bE_i1wk7qFFeNGkYAsbNnw2Z_Cgk1p_LnWjU5eKDukN-ayz87AkE_pZ1p8Berh__m98WTCAQlxKpcxb3PEreCRG7z85WA==
+  folderize: true
+  interval: all
+  max_connections: 5
+  max_counts: 0
+  max_retries: 5
+  max_tasks: 5
+  mode: post
+  naming: '{create}_{desc}'
+  page_counts: 20
+  path: Download
+  timeout: 10

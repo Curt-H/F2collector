@@ -1,0 +1,95 @@
+"""平台注册表：模式表、路径约定、链接标识提取、高级设置字段。"""
+
+import re
+from pathlib import Path
+from typing import Optional
+
+#: 工具根目录（F2test）
+TOOL_ROOT = Path(__file__).resolve().parent.parent
+
+DOUYIN_MODES = [
+    "one", "post", "like", "collection", "collects",
+    "music", "mix", "live", "related", "friend",
+]
+
+#: 需要询问/生效 interval 的模式（one/live 不需要）
+INTERVAL_MODES = {"post", "like", "collection", "collects", "music", "mix", "related", "friend"}
+
+#: f2 --auto-cookie 支持的浏览器（与 f2 0.0.1.7 的 BROWSER_LIST 一致）
+BROWSERS = [
+    "chrome", "firefox", "edge", "opera", "opera_gx",
+    "safari", "chromium", "brave", "vivaldi", "librewolf",
+]
+
+# 高级设置字段: (键, 类型bool/int/str, 中文标签, 默认值)
+# 默认值取自 f2 0.0.1.7 包内 conf/app.yaml（低频默认）；
+# 布尔项按"只保留媒体文件（图片/视频）"的需求显式置假：folderize 平铺、
+# music/cover/desc/lyric 全关。
+# naming 默认不含 {desc}：f2 仅将 desc 截断到 200 字符（win32），而完整路径
+# （Download\...\作者\{naming}\{naming}_desc.txt）叠加后极易超过 Windows
+# MAX_PATH=260 限制，导致 FileNotFoundError；文案内容本就会存入 _desc.txt，
+# 用定长的 {aweme_id} 命名既唯一又安全。
+DOUYIN_ADVANCED = [
+    ("folderize", "bool", "按作品分文件夹保存", False),
+    ("music", "bool", "保存视频原声", False),
+    ("cover", "bool", "保存视频封面", False),
+    ("desc", "bool", "保存视频文案", False),
+    ("lyric", "bool", "保存原声歌词(.lrc)", False),
+    ("naming", "str", "文件命名规则", "{create}_{aweme_id}"),
+    ("path", "str", "下载根目录", str(TOOL_ROOT / "Download" / "dy")),
+    ("max_counts", "int", "最大下载数(0不限)", 0),
+    ("max_tasks", "int", "异步任务数", 10),
+    ("max_connections", "int", "并发连接数", 5),
+    ("page_counts", "int", "每页获取作品数", 20),
+    ("page_interval", "int", "翻页间隔(秒,防风控)", 45),
+    ("timeout", "int", "请求超时(秒)", 20),
+    ("max_retries", "int", "超时重试次数", 5),
+]
+PLATFORMS = {
+    "douyin": {
+        "key": "douyin", "app": "douyin", "alias": "dy", "label": "抖音",
+        "modes": DOUYIN_MODES,
+        "conf_dir": TOOL_ROOT / "dy" / "conf",
+        "cookie_file": TOOL_ROOT / "dy" / "cookie.yaml",
+        "download_dir": TOOL_ROOT / "Download" / "dy",
+        "advanced": DOUYIN_ADVANCED,
+    },
+}
+
+# 从链接提取作者/作品标识的正则（Q13：别名优先，缺省自动提取）
+_ID_PATTERNS = {
+    "douyin": [
+        re.compile(r"(MS4wLjABAAAA[\w-]+)"),
+        re.compile(r"/(?:video|note)/(\d+)"),
+    ],
+}
+
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL"} | {
+    f"COM{i}" for i in range(1, 10)
+} | {f"LPT{i}" for i in range(1, 10)}
+
+
+def get_platform(key: str) -> dict:
+    try:
+        return PLATFORMS[key]
+    except KeyError:
+        raise ValueError(f"未知平台: {key}（支持: {', '.join(PLATFORMS)}）")
+
+
+def extract_identifier(platform_key: str, url: str) -> Optional[str]:
+    """从链接提取作者标识（sec_user_id / 微博 uid）或单作品 id，失败返回 None。"""
+    for pattern in _ID_PATTERNS.get(platform_key, []):
+        match = pattern.search(url or "")
+        if match:
+            return match.group(1)
+    return None
+
+
+def sanitize_name(name: str) -> str:
+    """清理为安全的配置文件名（保留中文）。"""
+    cleaned = re.sub(r'[\\/:*?"<>|\r\n\t ]+', "_", (name or "").strip()).strip("._")
+    if not cleaned:
+        raise ValueError("任务别名为空")
+    if cleaned.upper() in _WINDOWS_RESERVED:
+        cleaned = "_" + cleaned
+    return cleaned

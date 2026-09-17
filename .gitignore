@@ -1,0 +1,20 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ---- Runtime data: contains cookies & personal data, NEVER commit ----
+python/
+dy/
+wb/
+Download/
+logs/
+*.db
+*.tmp
+f2dl/_cache/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+Thumbs.db
+

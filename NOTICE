@@ -1,0 +1,33 @@
+f2dl
+Copyright 2026 the f2dl authors
+
+This product includes software derived from the f2 project
+(https://github.com/Johnserf-Seed/f2), Copyright Johnserf-Seed,
+licensed under the Apache License, Version 2.0.
+
+The `f2/` directory in this repository is a vendored copy of f2 0.0.1.7 with
+local modifications:
+
+  * weibo Live Photo (livephoto) video download support
+  * download requests now follow HTTP redirects
+  * Bark push notification disabled by default
+  * incomplete downloads are no longer silently finalized: a network error
+    mid-download keeps the `.tmp` part-file (for breakpoint resume), marks
+    the task failed and fails the process so the orchestrator (f2dl) retries
+    the whole task and resumes the interrupted file
+  * douyin user-post listing is fetched directly through a real-Firefox
+    channel (Playwright, `apps/douyin/browser_fetch.py`): the page's own JS
+    signs the request in a genuine browser environment and Python only taps
+    the responses. Headless is preferred with an automatic headed retry;
+    the httpx channel remains as the last-resort fallback. Scrolling is
+    fully automatic: 5-15s random CD per page, posture-rotating retries,
+    auto session renewal (up to 5x, cross-session dedup) until the
+    incremental window is covered, per-item stop at the last_run moment,
+    and a 30-minute total budget as a runaway fuse. The post mode also
+    derives the user folder from the works list itself, skipping the
+    profile endpoint entirely (O3); the Playwright browser instance is
+    kept alive across sessions within a process (W1)
+    (verified 2026-09-15, see `probe_browser_post.py` /
+    `verify_browser_filter.py`)
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
