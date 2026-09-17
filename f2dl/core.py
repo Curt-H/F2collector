@@ -197,8 +197,7 @@ def _run_with_retry(args: List[str], platform_key: str = "", task_label: str = "
 
     幂等：已下载文件被 f2 按存在性跳过，中断文件从 .tmp 断点续传，
     每次重试只补漏。仅当最终成功（返回 0）时调用方才记录 last_run。
-    重试等待期若检测到 403 风控特征，提示用户用 F2 auto-cookie 更新
-    cookie（刷新模块已冻结，见 f2dl/token_refresh.py）；每次运行结果
+    重试等待期若检测到 403 风控特征，提示用户更新 cookie（每任务启动本就会强制重抓）；每次运行结果
     追加 logs/risk_stats.csv。
 
     本地补丁(f2dl)：退避序列按平台选择——抖音 Web 列表接口的 403 属
@@ -220,10 +219,11 @@ def _run_with_retry(args: List[str], platform_key: str = "", task_label: str = "
         if platform_key and _looks_like_403(output):
             if platform_key == "douyin":
                 console.print(
-                    "[yellow]检测到抖音 403 风控特征——Argus 网关疑似进入时段性收紧窗口"
-                    "（实测可持续 1~3 小时）。任务将在长冷却后自动重跑（第 "
-                    f"{attempt}/{retries} 次，{delay // 60} 分钟后）：已下载作品自动跳过、"
-                    "中断文件断点续传；期间可 Ctrl+C 退出，之后重跑同一任务自动补拉。[/yellow]"
+                    "[yellow]检测到抖音 403 风控特征——任务将在冷却后自动重跑"
+                    f"（第 {attempt}/{retries} 次，{delay} 秒后，退避序列 60/90/120 秒）："
+                    "已下载作品自动跳过、中断文件断点续传。若 3 轮重试后仍失败，"
+                    "多为 Argus 时段性收紧窗口（历史实测可持续 1~3 小时），"
+                    "建议稍后再跑；期间可 Ctrl+C 退出，之后重跑同一任务自动补拉。[/yellow]"
                 )
             else:
                 console.print(

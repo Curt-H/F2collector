@@ -129,24 +129,24 @@ def grab_cookie(platform_key: str, browser: str = "firefox") -> Tuple[bool, str]
         raise ValueError(f"不支持的浏览器: {browser}（可选: {', '.join(BROWSERS)}）")
 
     try:
-        import browser_cookie3  # 延迟导入（软依赖，与 token_refresh.py 同模式）
+        import browser_cookie3  # 延迟导入（软依赖）
     except ImportError as exc:  # pragma: no cover - requirements 已含此依赖
         raise CookieNotReadyError(
             f"缺少 browser-cookie3 依赖，无法从 {browser} 抓取 cookie：{exc}"
         ) from exc
 
-    fn = {
-        "chrome": browser_cookie3.chrome,
-        "firefox": browser_cookie3.firefox,
-        "edge": browser_cookie3.edge,
-        "opera": browser_cookie3.opera,
-        "opera_gx": browser_cookie3.opera_gx,
-        "safari": browser_cookie3.safari,
-        "chromium": browser_cookie3.chromium,
-        "brave": browser_cookie3.brave,
-        "vivaldi": browser_cookie3.vivaldi,
-        "librewolf": browser_cookie3.librewolf,
-    }[browser]
+    # 本地补丁(C3, 2026-09-17)：下方域名硬编码 douyin.com——未注册平台
+    # 显式报错，防止未来解封微博等平台时静默抓错站点的 cookie。
+    if platform_key != "douyin":
+        raise NotImplementedError(
+            "grab_cookie 目前仅支持 douyin（域名硬编码 douyin.com），不支持: "
+            f"{platform_key}"
+        )
+    # 本地补丁(C4, 2026-09-17)：browser→抓取函数直接查库属性，替代原先
+    # 10 分支手写字典（browser 已过 BROWSERS 校验，此处兜底防御）。
+    fn = getattr(browser_cookie3, browser, None)
+    if fn is None:
+        raise CookieNotReadyError(f"browser_cookie3 不支持从 {browser} 抓取 cookie")
     domain = "douyin.com"
 
     try:

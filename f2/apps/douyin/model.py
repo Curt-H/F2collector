@@ -40,7 +40,7 @@ class BaseRequestModel(BaseModel):
     # not call gen_real_msToken again.)
     try:
         msToken: str = TokenManager.gen_real_msToken()
-    except:
+    except Exception:  # 本地补丁(C6, 2026-09-17)：裸 except 会吞 KeyboardInterrupt/SystemExit
         msToken: str = TokenManager.gen_false_msToken()
 
 

@@ -1,6 +1,8 @@
 """配置生成：官方默认（f2 --init-config）底稿 + 关键字段改写 → 任务配置（Q3/Q6）。"""
 
 import copy
+import os
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -20,10 +22,16 @@ def official_defaults(platform_key: str) -> dict:
     cache = _CACHE_DIR / f"official_{plat['app']}.yaml"
     if not cache.exists():
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        rc = runner.run_f2(
-            [plat["alias"], "--init-config", str(cache)],
-            timeout=runner.SHORT_TIMEOUT,
-        )
+        try:
+            rc = runner.run_f2(
+                [plat["alias"], "--init-config", str(cache)],
+                timeout=runner.SHORT_TIMEOUT,
+            )
+        except subprocess.SubprocessError as exc:
+            # 本地补丁(D1, 2026-09-17)：TimeoutExpired 等子进程异常就地转为
+            # RuntimeError——下游（cli/core/wizard）统一按可读错误处理，
+            # 不再裸栈崩溃。
+            raise RuntimeError(f"f2 --init-config 超时或失败: {exc}") from exc
         if rc != 0 or not cache.exists():
             raise RuntimeError("f2 --init-config 生成官方默认配置失败")
     data = yaml.safe_load(cache.read_text(encoding="utf-8")) or {}
@@ -72,7 +80,12 @@ def conf_path(platform_key: str, name: str) -> Path:
 def save_conf(path: Path, conf: dict) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.dump(conf, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # 本地补丁(C5, 2026-09-17)：原子写——先写同目录临时文件再 os.replace，
+    # 防止任务被中断（Ctrl+C/断电）时截断任务配置，导致下次重跑
+    # yaml 解析失败报"无法识别任务配置的平台"。
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(yaml.dump(conf, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def load_conf(path: Path) -> dict:
