@@ -492,9 +492,30 @@ class DouyinHandler:
                     self.kwargs, sec_user_id, udb
                 )
 
-            # # 一次性批量插入作品数据到数据库
-            # async with AsyncVideoDB("douyin_videos.db") as db:
-            #     await db.batch_insert_videos(aweme_data_list._to_list(), ignore_fields)
+
+    async def _page_delay(self) -> None:
+        """翻页间隔统一实现（本地补丁 C1/D3, 2026-09-17）。
+
+        原 12 个模式循环各自内联同一片段（复制粘贴），此处集中实现：
+        - page_interval 独立可调（±抖动，防固定节奏的机器特征）；
+        - 未配置/非法时回退上游行为（timeout±5s）；
+        - D3：显式 0 合法（原先 ``or`` 语义会把 0 当未配置吞掉）；小基值的
+          抖动幅度按基值 20% 收缩并钳非负，避免负延迟使间隔失效。
+        (Centralized paging delay: page_interval with jitter, timeout
+        fallback, explicit zero allowed, non-negative clamp for small bases.)
+        """
+        raw = self.kwargs.get("page_interval")
+        if raw is None or raw == "":
+            raw = self.kwargs.get("timeout", 5)
+        fallback = float(self.kwargs.get("timeout", 5) or 5)
+        try:
+            base = float(raw)
+        except (TypeError, ValueError):
+            base = fallback
+        jitter = min(5.0, abs(base) * 0.2)
+        delay = max(0.0, base + random.uniform(-jitter, jitter))
+        logger.info(_("等待 {0} 秒后继续").format(round(delay)))
+        await asyncio.sleep(delay)
 
     async def fetch_user_post_videos(
         self,
@@ -605,17 +626,14 @@ class DouyinHandler:
             max_cursor = video.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(B1/C1, 2026-09-17)：has_more=False 即服务端明示终点——
+            # 直接结束翻页，不再白睡一个 page_interval 后才发现下一轮走
+            # 会话终点捷径（全量聚合场景每任务省 40~50 秒的纯等待；不减少
+            # 任何有效请求）。增量窗口截断仍由循环头部 max_cursor < min_cursor
+            # 检查先行处理，不受影响。间隔语义统一见 _page_delay(C1/D3)。
+            if not video.has_more:
+                break
+            await self._page_delay()
 
         logger.info(
             _("结束处理用户发布的作品，共处理 {0} 个作品").format(videos_collected)
@@ -657,13 +675,7 @@ class DouyinHandler:
                 self.kwargs, aweme_data_list._to_list(), user_path
             )
 
-            # async with AsyncVideoDB("douyin_videos.db") as db:
-            #     for aweme_data in aweme_data_list:
-            #         await get_or_add_video_data(aweme_data, db, ignore_fields)
 
-            # # 一次性批量插入作品数据到数据库
-            # async with AsyncVideoDB("douyin_videos.db") as db:
-            #     await db.batch_insert_videos(aweme_data_list, ignore_fields)
 
     async def fetch_user_like_videos(
         self,
@@ -737,17 +749,11 @@ class DouyinHandler:
             max_cursor = like.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("结束处理用户点赞的作品，共处理 {0} 个作品").format(videos_collected)
@@ -858,17 +864,11 @@ class DouyinHandler:
             max_cursor = music.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("结束处理用户收藏音乐作品，共处理 {0} 个作品").format(music_collected)
@@ -979,17 +979,11 @@ class DouyinHandler:
             max_cursor = collection.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("结束处理用户收藏作品，共处理 {0} 个作品").format(videos_collected)
@@ -1170,17 +1164,11 @@ class DouyinHandler:
             max_cursor = collects.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(_("结束处理用户收藏夹，共找到 {0} 个收藏夹").format(collected))
 
@@ -1261,17 +1249,11 @@ class DouyinHandler:
             max_cursor = video.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("收藏夹：{0} 所有作品采集完毕，共处理 {1} 个作品").format(
@@ -1329,9 +1311,6 @@ class DouyinHandler:
                 self.kwargs, aweme_data_list._to_list(), user_path
             )
 
-        # async with AsyncVideoDB("douyin_videos.db") as db:
-        #     for aweme_data in aweme_data_list._to_list():
-        #         await get_or_add_video_data(aweme_data, db, ignore_fields)
 
     async def fetch_user_mix_videos(
         self,
@@ -1398,17 +1377,11 @@ class DouyinHandler:
             max_cursor = mix.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("结束处理用户合集作品，共处理 {0} 个作品").format(videos_collected)
@@ -1704,17 +1677,11 @@ class DouyinHandler:
             max_cursor = feed.max_cursor
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("结束处理用户首页推荐作品，共处理 {0} 个作品").format(videos_collected)
@@ -1827,17 +1794,11 @@ class DouyinHandler:
             filterGids = ",".join([str(aweme_id) for aweme_id in related.aweme_id])
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(
             _("结束处理作品相似推荐，共处理 {0} 个作品").format(videos_collected)
@@ -1952,17 +1913,11 @@ class DouyinHandler:
             pull_type = friend.level
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(_("结束处理好友作品，共处理 {0} 个作品").format(videos_collected))
 
@@ -2065,17 +2020,11 @@ class DouyinHandler:
             offset, max_time, min_time = logicmap.get(source_type)
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(_("结束处理关注用户，共处理 {0} 个用户").format(users_collected))
 
@@ -2167,17 +2116,11 @@ class DouyinHandler:
             max_time = follower.min_time
 
             # 避免请求过于频繁
-            # 本地补丁(f2dl)：翻页间隔独立可调（page_interval±5s 抖动，防风控）；
-            # 未配置/非法时保持上游行为（timeout±5s）。
-            # (Paging interval configurable via page_interval with +±5s jitter;
-            # fall back to upstream timeout+±5s when unset or invalid.)
-            _base = self.kwargs.get("page_interval") or self.kwargs.get("timeout", 5)
-            try:
-                delay = float(_base) + random.uniform(-5, 5)
-            except (TypeError, ValueError):
-                delay = self.kwargs.get("timeout", 5) + random.uniform(-5, 5)
-            logger.info(_("等待 {0} 秒后继续").format(round(delay)))
-            await asyncio.sleep(delay)
+            # 本地补丁(C1, 2026-09-17)：翻页间隔统一走 _page_delay()——
+            # 原先此片段在各模式循环中复制粘贴；行为不变仅去重，间隔语义
+            # （page_interval±抖动、未配置回退 timeout±5s、D3 非负钳制）
+            # 集中见 _page_delay 文档。
+            await self._page_delay()
 
         logger.info(_("结束处理粉丝用户，共处理 {0} 个用户").format(users_collected))
 
