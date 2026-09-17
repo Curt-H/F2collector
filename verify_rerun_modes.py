@@ -13,6 +13,7 @@ except Exception:
     pass
 
 import yaml  # noqa: E402
+from datetime import datetime  # noqa: E402
 
 from f2dl import core  # noqa: E402
 
@@ -73,14 +74,16 @@ def get_i_value(args):
 
 
 LR = "2026-09-15 13:54:54"
+# 预期窗口动态取"今天"（原脚本硬编码编写当日，跨日必假失败）
+EXP_WINDOW = f"2026-09-15|{datetime.now():%Y-%m-%d}"
 
 # ── A：交互选 1（增量）→ 注入 last_run 窗口 ──
 PROMPT_RET["v"] = "1"
 conf = make_conf("a_incr", last_run=LR)
 rc = core.rerun_task(conf, browser="firefox")
 iv = get_i_value(captured["args"])
-report_a = rc == 0 and iv == "2026-09-15|2026-09-16"
-print(f"[A_incremental] rc={rc}, -i={iv} (预期 2026-09-15|2026-09-16)")
+report_a = rc == 0 and iv == EXP_WINDOW
+print(f"[A_incremental] rc={rc}, -i={iv} (预期 {EXP_WINDOW})")
 print("[A_incremental] ✅" if report_a else "[A_incremental] ❌")
 ok = ok and report_a
 
@@ -100,8 +103,8 @@ set_tty(False)
 conf = make_conf("c_nonint", last_run=LR)
 rc = core.rerun_task(conf, browser="firefox", interactive=False)
 iv = get_i_value(captured["args"])
-report_c = rc == 0 and iv == "2026-09-15|2026-09-16"
-print(f"[C_noninteractive_default] rc={rc}, -i={iv} (预期增量窗口)")
+report_c = rc == 0 and iv == EXP_WINDOW
+print(f"[C_noninteractive_default] rc={rc}, -i={iv} (预期增量窗口 {EXP_WINDOW})")
 print("[C_noninteractive_default] ✅" if report_c else "[C_noninteractive_default] ❌")
 ok = ok and report_c
 set_tty(True)
