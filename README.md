@@ -55,6 +55,7 @@ python app.py -u "<链接>" -M post --gen-only   # 仅生成配置不下载
 | `f2/` | 内置的 f2 引擎（vendored，含本地补丁，勿手动修改） |
 | `f2dl/` | 工具本体 |
 | `scripts\` | 探针与验证/e2e 脚本（诊断用手动运行） |
+| `utils\` | 实用工具（如关注列表导出，手动运行） |
 | `Download\` | 下载输出 |
 | `logs\` | f2 运行日志（排障用） |
 

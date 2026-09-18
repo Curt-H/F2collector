@@ -51,6 +51,7 @@ python app.py -u "<link>" -M post --gen-only   # generate config only
 |------|-------------|
 | `f2/` | Vendored f2 engine (with local patches, do not edit) |
 | `f2dl/` | The tool itself |
+| `utils/` | Utility tools (e.g. following-list export; run manually) |
 | `dy\` | Runtime dirs: cookies, task configs (contain personal data — gitignored) |
 | `Download\` | Download output |
 | `logs\` | f2 runtime logs (for troubleshooting) |

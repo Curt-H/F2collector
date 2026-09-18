@@ -13,6 +13,7 @@ logs/
 *.db
 *.tmp
 f2dl/_cache/
+utils/output/
 
 # ---- IDE / OS ----
 .idea/

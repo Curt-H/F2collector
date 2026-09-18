@@ -264,6 +264,64 @@ def test_create_user_folder_flat(tmp_path):
     assert not (tmp_path / "douyin").exists()
 
 
+# ── FOLLOW-1：关注列表导出工具的纯函数 ──
+
+
+def _load_following_tool():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "following_list", TOOL_ROOT / "utils" / "following_list.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_following_resolve_sec_uid_local():
+    mod = _load_following_tool()
+    sec = "MS4wLjABAAAA" + "y" * 20
+    # 完整 user 链接走本地正则提取，不发任何网络请求
+    assert mod.resolve_sec_uid(f"https://www.douyin.com/user/{sec}?x=1") == sec
+
+
+def test_following_format_lines_two_per_user():
+    mod = _load_following_tool()
+    text = mod.format_lines([("小明", "SEC1"), ("小红", "SEC2")])
+    assert text.strip().splitlines() == [
+        "小明",
+        "https://www.douyin.com/user/SEC1",
+        "小红",
+        "https://www.douyin.com/user/SEC2",
+    ]
+
+
+def test_following_accumulate_dedup_and_total():
+    mod = _load_following_tool()
+    page1 = {
+        "status_code": 1,
+        "has_more": True,
+        "total": 3,
+        "followings": [
+            {"sec_uid": "A", "nickname": "甲"},
+            {"sec_uid": "B", "nickname": "乙"},
+        ],
+    }
+    page2 = {
+        "status_code": 1,
+        "has_more": False,
+        "total": 3,
+        "followings": [
+            {"sec_uid": "B", "nickname": "乙"},  # 跨页重复 → 去重
+            {"sec_uid": "C", "nickname": "丙"},
+        ],
+    }
+    items, total, status = mod.accumulate([page1, page2])
+    assert [s for _, s in items] == ["A", "B", "C"]  # 首见顺序
+    assert items[0] == ("甲", "A")
+    assert total == 3 and status == 1
+
+
 # ── f2 日志：file_only 记录只进文件不上控制台（NOISE-1）──
 
 
