@@ -152,7 +152,7 @@ def resolve_name(platform_key: str, url: str, name: str, mode: str) -> Tuple[Opt
 #: .tmp 断点续传，每次重试只补漏。
 _RETRY_DELAYS_SEC = (30, 60, 120)
 
-# 本地补丁(f2dl)：抖音任务级失败冷却。
+# 本地补丁(f2dl)：某平台任务级失败冷却。
 # 历史：2026-09-15 httpx 直连列表接口存在 Argus"小时级时段性收紧"窗口
 # （14:03 起 post 接口连续 8/8 全拒，16:47 未恢复），当时将冷却拉长到
 # 小时级(10min→30min→1h)。2026-09-16 起 post 列表已改走 Firefox 浏览器
@@ -160,7 +160,7 @@ _RETRY_DELAYS_SEC = (30, 60, 120)
 # 任务对 Argus 的暴露面基本清零，失败多剩 CDN 断流等瞬时原因，
 # 小时级冷却只剩无谓等待。按用户要求缩短为 60/90/120 秒逐级放大；
 # 已下载文件按存在性跳过、中断文件断点续传，重试只补漏。
-# (Douyin task-level retry cool-down shortened to 60/90/120s: the browser
+# (the platform task-level retry cool-down shortened to 60/90/120s: the browser
 #  channel removed the Argus exposure that once justified hour-level waits.)
 _DOUYIN_RETRY_DELAYS_SEC = (60, 90, 120)
 
@@ -214,10 +214,10 @@ def _run_with_retry(args: List[str], platform_key: str = "", task_label: str = "
     重试等待期若检测到 403 风控特征，提示用户更新 cookie（每任务启动本就会强制重抓）；每次运行结果
     追加 logs/risk_stats.csv。
 
-    本地补丁(f2dl)：退避序列按平台选择——抖音 Web 列表接口的 403 属
+    本地补丁(f2dl)：退避序列按平台选择——某平台 Web 列表接口的 403 属
     Argus"时段性收紧"(小时级)，短退避必死，改用小时级长冷却；其余平台
     保持原指数短退避。整任务重跑即新进程，签名/指纹每次天然轮换。
-    (Per-platform backoff: hour-level cool-down for Douyin's Argus
+    (Per-platform backoff: hour-level cool-down for the platform's Argus
     tightening windows; other platforms keep the short escalating series.)
     """
     if platform_key == "douyin":

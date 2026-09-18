@@ -1,14 +1,14 @@
 # f2dl
 
-A Douyin / Weibo media downloader built on top of [f2](https://github.com/Johnserf-Seed/f2). **The f2 engine is vendored into this repository with local enhancements — no `pip install f2` required, just clone and run.**
+A short-video platform media downloader built on top of [f2](https://github.com/Johnserf-Seed/f2). **The f2 engine is vendored into this repository with local enhancements — no `pip install f2` required, just clone and run.**
 
 ## Features
 
-- **Two platforms**: Douyin (10 modes) and Weibo (post); the f2 engine ships with the repo
+- **All download modes**: one/post/like/collection/collects/music/mix/live/related/friend (10 modes); the f2 engine ships with the repo
 - **Media only**: no captions / covers / music / lyrics by default — just images and videos
 - **Flat layout**: no per-post folders; media files are archived directly under each author's directory
 - **Auto-generated configs**: task configs are built from f2's official defaults and persisted to `dy\conf\`
-- **Incremental updates**: every task records a `last_run` timestamp; on Douyin the fetch window is narrowed to `last_run|today`, and already-downloaded items are skipped by the engine
+- **Incremental updates**: every task records a `last_run` timestamp; the fetch window is narrowed to `last_run|today`, and already-downloaded items are skipped by the engine
 - **Automatic retries**: network failures re-run the whole task (resume + skip completed), up to 2 retries
 - **Weibo Live Photo**: built-in patch downloads both the static frame `.jpg` and the motion video `_live_N.mov` (not implemented upstream)
 - **Cookie management**: grab from a browser (Chrome/Edge/Firefox...), paste manually, or import from an old f2 config; configure once, reuse forever
@@ -29,7 +29,7 @@ pip install -r requirements.txt
 
 ```powershell
 python dydl.py                                  # interactive wizard
-python dydl.py cookie -p douyin                 # grab Douyin cookie from browser (close the browser first)
+python dydl.py cookie -p douyin                 # grab the platform cookie from browser (close the browser first)
 python dydl.py cookie -p douyin --import-f2     # import cookie from an old f2 config
 python dydl.py -p douyin -u "https://www.douyin.com/user/MS4wLjAB..." -M post
 python dydl.py -p weibo  -u "https://weibo.com/u/1234567890" -M post

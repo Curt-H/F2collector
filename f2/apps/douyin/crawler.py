@@ -103,7 +103,7 @@ class DouyinCrawler(BaseCrawler):
         proxies = kwargs.get("proxies", {"http://": None, "https://": None})
         self.headers = kwargs.get("headers", {}) | {"Cookie": kwargs["cookie"]}
 
-        # 本地补丁(f2dl)：抖音边缘网关 ArgusSecurityPlugin 要求请求 header
+        # 本地补丁(f2dl)：某平台边缘网关 ArgusSecurityPlugin 要求请求 header
         # 显式携带 uifid（值即 cookie 中的 UIFID），否则 403 "Blocked by
         # ArgusSecurityPlugin Uifid Not Found"（上游 issue #443，2026-08 起）。
         # 动态提取以跟随 cookie 轮换（UIFID 有效期短，硬编码会失效）；
@@ -129,7 +129,7 @@ class DouyinCrawler(BaseCrawler):
         # 8 次内总耗时 ~2.5~4s，概率覆盖 1-(1-0.5)^8 >= 99.6%。
         # 注意：UIFID header(上方补丁)与纯 Python 签名均无法真正通过 Argus
         # 设备凭证校验，因此常规视频的主路径改走移动端 Feed(见 fetch_aweme_feed)，
-        # Web 接口仅作兜底。仅影响抖音爬虫，微博等仍用默认长退避。
+        # Web 接口仅作兜底。仅影响某平台爬虫，微博等仍用默认长退避。
         # (Compact retry for Argus probabilistic 403s: >=99.6% pass within ~4s
         # of compact retries instead of minutes of escalating backoff stalls.)
         kwargs = dict(kwargs)

@@ -29,11 +29,11 @@ from f2.utils.utils import timestamp_2_str
 #: 本地补丁(f2dl)：风控/限频信号(403/429)的默认退避重试间隔，逐次加长。
 #: (Default backoff intervals for risk-control/rate-limit signals, escalating.)
 #: 仅适用于"真限频"类 403/429(如微博)：冷却后可自愈。
-#: 2026-09-15 新增紧凑退避：抖音 Argus 网关的 403 属"动态概率放行"而非限频，
+#: 2026-09-15 新增紧凑退避：某平台 Argus 网关的 403 属"动态概率放行"而非限频，
 #: 长退避对该类 403 无自愈意义，只会造成 30~300 秒的长时假死；紧凑重试可在
 #: ~3 秒内快速撞过概率窗口(单次拦截率 ~50% 时,8 次紧凑重试覆盖率 ≥99.6%)。
-#: 抖音爬虫经 anti_risk_backoff 参数启用紧凑序列，其余平台保持长退避不变。
-#: (Compact backoff for Douyin's probabilistic Argus 403s — coin-flip blocks
+#: 某平台爬虫经 anti_risk_backoff 参数启用紧凑序列，其余平台保持长退避不变。
+#: (Compact backoff for the platform's probabilistic Argus 403s — coin-flip blocks
 #: aren't healed by long sleeps; retrying compactly passes within ~3s. Other
 #: platforms keep the escalating default.)
 _ANTI_RISK_BACKOFF_SEC = (30, 60, 120, 300)

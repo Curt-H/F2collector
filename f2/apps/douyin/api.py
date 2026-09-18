@@ -3,13 +3,13 @@
 
 class DouyinAPIEndpoints:
     """
-    API Endpoints for Douyin
+    API Endpoints for the platform
     """
 
-    # 抖音域名 (Douyin Domain)
+    # 某平台域名 (the platform Domain)
     DOUYIN_DOMAIN = "https://www.douyin.com"
 
-    # 抖音短域名 (Short Domain)
+    # 某平台短域名 (Short Domain)
     IESDOUYIN_DOMAIN = "https://www.iesdouyin.com"
 
     # 直播域名 (Live Domain)

@@ -8,9 +8,9 @@ from f2.utils.utils import get_resource_path
 
 class DouyinWebcastSignature:
     """
-    抖音直播间签名生成器 (Douyin Webcast Signature Generator)
+    某平台直播间签名生成器 (the platform Webcast Signature Generator)
 
-    该类用于生成抖音直播间的签名，通过传入直播间 ID 和用户唯一 ID，计算并返回签名。签名通过执行 JavaScript 代码计算生成，并结合其他参数进行 MD5 加密。
+    该类用于生成某平台直播间的签名，通过传入直播间 ID 和用户唯一 ID，计算并返回签名。签名通过执行 JavaScript 代码计算生成，并结合其他参数进行 MD5 加密。
 
     类属性:
     - user_agent (str): 自定义的用户代理字符串。如果未指定，使用默认的浏览器 UA。

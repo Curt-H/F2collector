@@ -1281,7 +1281,7 @@ def format_file_name(
 
     Args:
         naming_template (str): 文件的命名模板, 如 "{create}_{desc}" (Naming template for files, such as "{create}_{desc}")
-        aweme_data (dict): 抖音数据的字典 (dict of tiktok data)
+        aweme_data (dict): 某平台数据的字典 (dict of tiktok data)
         custom_fields (dict): 用户自定义字段, 用于替代默认的字段值 (Custom fields for replacing default field values)
 
     Note:

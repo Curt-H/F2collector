@@ -6,7 +6,7 @@ class TiktokAPIEndpoints:
     API Endpoints for TikTok
     """
 
-    # 抖音域名 (Tiktok Domain)
+    # 某平台域名 (Tiktok Domain)
     TIKTOK_DOMAIN = "https://www.tiktok.com"
 
     # 直播域名 (Webcast Domain)

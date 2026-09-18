@@ -97,7 +97,7 @@ _SESSION_END_CURSOR: Dict[str, int] = {}
 
 
 def _has_login_cookie(cookie: str) -> bool:
-    """cookie header 是否含抖音登录态核心 cookie(sessionid_ss/sessionid)。"""
+    """cookie header 是否含某平台登录态核心 cookie(sessionid_ss/sessionid)。"""
     for part in (cookie or "").split(";"):
         name = part.strip().partition("=")[0]
         if name in ("sessionid_ss", "sessionid"):
@@ -131,7 +131,7 @@ def _parse_cookie_header(header: str) -> List[dict]:
 def _do_scroll(page, posture_idx: int) -> None:
     """执行一次滚动（2026-09-16 滚动诊断探针实测校准）。
 
-    诊断结论：抖音 web 用户页的 window 滚动层不可滚
+    诊断结论：某平台 web 用户页的 window 滚动层不可滚
     （scrollingElement.scrollHeight==视口高），列表由 wheel 事件驱动
     （虚拟滚动）——wheel@视口内容区中心是唯一稳定推进游标的姿势，
     渐进式多步滚轮保持事件流；window.scrollTo/End 键作为辅助轮换。

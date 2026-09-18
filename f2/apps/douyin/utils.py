@@ -148,7 +148,7 @@ def _load_cached_mstoken() -> str:
 
 class TokenManager(BaseCrawler):
     """
-    TokenManager 类用于生成和管理与抖音相关的 token，包括 msToken 和 ttwid。
+    TokenManager 类用于生成和管理与某平台相关的 token，包括 msToken 和 ttwid。
 
     该类继承自 BaseCrawler，利用其中的 HTTP 客户端来发送请求。
 
@@ -709,7 +709,7 @@ class SecUserIdFetcher(BaseCrawler):
     该类继承自 BaseCrawler，并利用其 HTTP 客户端功能来发送请求。
 
     类属性:
-    - _DOUYIN_URL_PATTERN (re.Pattern): 抖音用户主页 URL 的正则表达式模式。
+    - _DOUYIN_URL_PATTERN (re.Pattern): 某平台用户主页 URL 的正则表达式模式。
     - _REDIRECT_URL_PATTERN (re.Pattern): 重定向 URL 中 sec_uid 的正则表达式模式。
     - proxies (dict): 代理配置。
 
@@ -881,8 +881,8 @@ class AwemeIdFetcher(BaseCrawler):
     该类继承自 BaseCrawler，并利用其 HTTP 客户端功能来发送请求。
 
     类属性:
-    - _DOUYIN_VIDEO_URL_PATTERN (re.Pattern): 抖音视频 URL 的正则表达式模式。
-    - _DOUYIN_NOTE_URL_PATTERN (re.Pattern): 抖音笔记 URL 的正则表达式模式。
+    - _DOUYIN_VIDEO_URL_PATTERN (re.Pattern): 某平台视频 URL 的正则表达式模式。
+    - _DOUYIN_NOTE_URL_PATTERN (re.Pattern): 某平台笔记 URL 的正则表达式模式。
     - proxies (dict): 代理配置。
 
     方法:
@@ -1047,7 +1047,7 @@ class MixIdFetcher(BaseCrawler):
     该类继承自 BaseCrawler，并利用其 HTTP 客户端功能来发送请求。
 
     类属性:
-    - _DOUYIN_MIX_URL_PATTERN (re.Pattern): 抖音合集 URL 的正则表达式模式。
+    - _DOUYIN_MIX_URL_PATTERN (re.Pattern): 某平台合集 URL 的正则表达式模式。
     - proxies (dict): 代理配置。
 
     方法:
@@ -1202,9 +1202,9 @@ class WebCastIdFetcher(BaseCrawler):
     该类继承自 BaseCrawler，并利用其 HTTP 客户端功能来发送请求。
 
     类属性:
-    - _DOUYIN_LIVE_URL_PATTERN (re.Pattern): 抖音直播 URL 的正则表达式模式。
-    - _DOUYIN_LIVE_URL_PATTERN2 (re.Pattern): 抖音直播 URL 的第二种正则表达式模式。
-    - _DOUYIN_ROOM_URL_PATTERN (re.Pattern): 抖音直播 URL 的第三种正则表达式模式。
+    - _DOUYIN_LIVE_URL_PATTERN (re.Pattern): 某平台直播 URL 的正则表达式模式。
+    - _DOUYIN_LIVE_URL_PATTERN2 (re.Pattern): 某平台直播 URL 的第二种正则表达式模式。
+    - _DOUYIN_ROOM_URL_PATTERN (re.Pattern): 某平台直播 URL 的第三种正则表达式模式。
     - proxies (dict): 代理配置。
 
     方法:
@@ -1503,7 +1503,7 @@ def format_file_name(
 
     Args:
         naming_template (str): 文件的命名模板, 如 "{create}_{desc}" (Naming template for files, such as "{create}_{desc}")
-        aweme_data (dict): 抖音数据的字典 (dict of douyin data)
+        aweme_data (dict): 某平台数据的字典 (dict of douyin data)
         custom_fields (dict): 用户自定义字段, 用于替代默认的字段值 (Custom fields for replacing default field values)
 
     Note:
@@ -1667,11 +1667,11 @@ def show_qrcode(qrcode_url: str, show_image: bool = False) -> None:
 
 def json_2_lrc(data: Union[str, list, dict]) -> str:
     """
-    从抖音原声json格式歌词生成lrc格式歌词
-    (Generate lrc lyrics format from Douyin original json lyrics format)
+    从某平台原声json格式歌词生成lrc格式歌词
+    (Generate lrc lyrics format from the platform original json lyrics format)
 
     Args:
-        data (Union[str, list, dict]): 抖音原声json格式歌词 (Douyin original json lyrics format)
+        data (Union[str, list, dict]): 某平台原声json格式歌词 (the platform original json lyrics format)
 
     Returns:
         str: 生成的lrc格式歌词 (Generated lrc format lyrics)
