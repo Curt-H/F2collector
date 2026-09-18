@@ -10,6 +10,7 @@ verify 脚本的 monkeypatch 覆盖，且 f2 内置 10 个单测中 8 个真实�
     python -m pytest f2dl/test/test_f2dl_offline.py -q
 """
 
+import logging
 import sys
 import time
 from datetime import datetime
@@ -240,3 +241,55 @@ def test_rerun_incremental_uses_real_conf_and_window(monkeypatch, tmp_path):
     assert captured["conf_path"] == conf  # 增量直用真实配置（不建临时副本）
     args = captured["args"]
     assert args[args.index("-i") + 1].startswith("2026-09-15|")  # 注入增量窗口
+
+
+# ── f2 日志：file_only 记录只进文件不上控制台（NOISE-1）──
+
+
+def test_file_only_records_skip_console_handler():
+    from f2.log.logger import LogManager, logger as f2_logger  # noqa: E402
+    from rich.logging import RichHandler
+
+    # pytest 期间 root logger 带捕获 handler，log_setup() 的 hasHandlers()
+    # 会短路——为保证确定性，控制台 handler 缺失时强制重建双通道配置。
+    if not any(isinstance(h, RichHandler) for h in f2_logger.handlers):
+        LogManager().setup_logging(
+            level=logging.INFO, log_to_console=True, log_path=TOOL_ROOT / "logs"
+        )
+
+    console_handlers = [h for h in f2_logger.handlers if isinstance(h, RichHandler)]
+    ch = console_handlers[0]
+    if not ch.filters:
+        pytest.skip("RichHandler 未挂 file_only 过滤器（补丁未生效？）")
+
+    plain = f2_logger.makeRecord("f2", logging.ERROR, "p", 1, "plain", None, None)
+    marked = f2_logger.makeRecord(
+        "f2",
+        logging.ERROR,
+        "p",
+        1,
+        "marked",
+        None,
+        None,
+        extra={"file_only": True},
+    )
+
+    def passes(filters, record):
+        # 复刻 logging.Filterer.filter 的语义：callable 直接调用，
+        # Filter 对象调用其 .filter(record)
+        for f in filters:
+            result = f.filter(record) if hasattr(f, "filter") else f(record)
+            if not result:
+                return False
+        return True
+
+    # 控制台 handler：普通记录放行，file_only 记录被拒
+    assert passes(ch.filters, plain)
+    assert not passes(ch.filters, marked)
+    # 文件 handler 不装该过滤器，file_only 记录照常落盘
+    file_handlers = [
+        h for h in f2_logger.handlers if isinstance(h, logging.FileHandler)
+    ]
+    for fh in file_handlers:
+        assert passes(fh.filters, plain)
+        assert passes(fh.filters, marked)

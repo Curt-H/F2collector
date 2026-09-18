@@ -109,6 +109,16 @@
 
 **回归覆盖**：`verify_rerun_modes.py` 新增场景 H（全量 `-c` 临时副本无 last_run / `-i all` / 真实配置 last_run 推进且 interval 不动 / 临时文件即用即删）；离线单测新增 `test_rerun_full_uses_temp_conf_without_last_run` / `test_rerun_incremental_uses_real_conf_and_window`。
 
+### NOISE-1. 下载重试的 traceback 大框刷屏（已修复）
+
+**现象**：下载高峰期界面出现 `httpx.PoolTimeout` 的整块 rich traceback（"文件区块超时"），观感差。
+
+**来源**：`max_tasks=10` 下载协程共享 `max_connections=5` 连接池，高峰排队超时抛 PoolTimeout——瞬时争用，就地重试（.tmp 断点续传）已自愈；但 `_download_chunks` 的 7 个 except 分支把 `traceback.format_exc()` 与错误详情以 `logger.error` 双发到 RichHandler 控制台（`rich_tracebacks=True` 渲染成大框）与文件两个 handler。
+
+**修复**：`f2/log/logger.py` 的 RichHandler 增加 `file_only` 过滤器；`base_downloader.py` 中 7 处可重试分支的 traceback+详情改为 `extra={"file_only": True}`（只进 `logs/f2-*.log`，界面仅保留单行重试 WARNING 与最终失败结算）；3 处最终失败分支仅 traceback 转 file_only、终态消息保留控制台。
+
+**备注**：根治 PoolTimeout 可把连接池提到与 max_tasks 一致，但会加大 CDN 并发暴露面（风控）且重试已自愈，按 Q6a 纪律维持现状。
+
 ## 复核与回滚
 
 ```powershell

@@ -79,6 +79,11 @@ class LogManager(metaclass=Singleton):
                 rich_tracebacks=True,
             )
             ch.setFormatter(logging.Formatter("{message}", style="{", datefmt="[%X]"))
+            # 本地补丁(NOISE-1, 2026-09-18)：带 file_only 标记的记录只进
+            # 文件不上控制台——下载重试的 traceback/瞬时错误细节由
+            # base_downloader 以 extra={"file_only": True} 发出，界面只
+            # 保留单行重试 WARNING 与最终失败结算。
+            ch.addFilter(lambda record: not getattr(record, "file_only", False))
             self.logger.addHandler(ch)
 
         if log_path:

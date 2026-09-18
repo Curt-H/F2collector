@@ -138,38 +138,55 @@ class BaseDownloader(BaseCrawler):
                     task_id, advance=len(chunk), total=int(content_length)
                 )
         except httpx.TimeoutException as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块超时：{0}").format(e))
+            # 本地补丁(NOISE-1)：抖动细节只进日志文件；界面由
+            # _download_link_with_retry 的单行重试 WARNING 负责。
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块超时：{0}").format(e), extra={"file_only": True}
+            )
             await _aclose_quietly(response)
             raise
         except httpx.NetworkError as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块网络错误：{0}").format(e))
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块网络错误：{0}").format(e), extra={"file_only": True}
+            )
             await _aclose_quietly(response)
             raise
         except httpx.HTTPStatusError as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块HTTP错误：{0}").format(e))
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块HTTP错误：{0}").format(e), extra={"file_only": True}
+            )
             await _aclose_quietly(response)
             raise
         except httpx.ProxyError as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块代理错误：{0}").format(e))
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块代理错误：{0}").format(e), extra={"file_only": True}
+            )
             await _aclose_quietly(response)
             raise
         except httpx.UnsupportedProtocol as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块协议错误：{0}").format(e))
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块协议错误：{0}").format(e), extra={"file_only": True}
+            )
             await _aclose_quietly(response)
             raise
         except httpx.StreamError as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块流错误：{0}").format(e))
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块流错误：{0}").format(e), extra={"file_only": True}
+            )
             await _aclose_quietly(response)
             raise
         except Exception as e:
-            logger.error(traceback.format_exc())
-            logger.error(_("文件区块下载失败：{0} Exception：{1}").format(request, e))
+            logger.error(traceback.format_exc(), extra={"file_only": True})
+            logger.error(
+                _("文件区块下载失败：{0} Exception：{1}").format(request, e),
+                extra={"file_only": True},
+            )
             await _aclose_quietly(response)
             raise
 
@@ -427,7 +444,9 @@ class BaseDownloader(BaseCrawler):
             except Exception as e:
                 # 本地补丁(f2dl)：非网络异常(磁盘、编码等)——重试无意义，
                 # 保留 .tmp 断点并交由外层结算。
-                logger.error(traceback.format_exc())
+                logger.error(
+                    traceback.format_exc(), extra={"file_only": True}
+                )
                 logger.error(
                     _("下载失败，保留临时文件 {0} 以便断点续传：{1}").format(
                         tmp_path, e
@@ -659,7 +678,9 @@ class BaseDownloader(BaseCrawler):
                         logger.debug(_("文件已保存到： {0}").format(full_path))
                         return
 
-                    logger.error(traceback.format_exc())
+                    logger.error(
+                        traceback.format_exc(), extra={"file_only": True}
+                    )
                     logger.error(_("[red]m3u8文件下载失败，但文件已保存[/red]"))
                     await self.progress.update(
                         task_id,
@@ -670,7 +691,9 @@ class BaseDownloader(BaseCrawler):
                     return
 
                 except Exception as e:
-                    logger.error(traceback.format_exc())
+                    logger.error(
+                        traceback.format_exc(), extra={"file_only": True}
+                    )
                     logger.error(_("m3u8文件解析失败: {0}").format(e))
                     await self.progress.update(
                         task_id,
