@@ -164,6 +164,19 @@ _RETRY_DELAYS_SEC = (30, 60, 120)
 #  channel removed the Argus exposure that once justified hour-level waits.)
 _DOUYIN_RETRY_DELAYS_SEC = (60, 90, 120)
 
+#: 批量追更任务间随机冷却(秒)——削弱固定节奏的机器特征。
+#: 2026-09-16 从小时级缩短为 60~120 秒——post 链路改走浏览器通道
+#: (列表/profile 均不经 Argus)后，长冷却失去前提；
+#: 2026-09-18 按账号所有者决策(Q4c)再缩短为 30~60 秒：浏览器会话
+#: 内部本有 5~15s 翻页 CD 与 30 分钟预算节奏，30s+ 随机间隔仍非
+#: 固定节奏。风险标注：同一登录账号单位时间浏览主页数上升
+#: (约 20→30+/小时)，暴露面相应增加；回滚 = git revert 对应提交。
+_TASK_COOLDOWN_RANGE_SEC = (30, 60)
+
+#: 批量追更重试轮之间的冷却(秒)——仅失败路径运行，保持 60~120 秒：
+#: 失败后等久一点更稳，且常规批次零耗时。
+_RETRY_ROUND_COOLDOWN_RANGE_SEC = (60, 120)
+
 
 #: 403 风控特征（用于检测上次运行输出并触发 token 刷新）
 _RISK_403_RE = re.compile(r"(403 Forbidden|Status Code: 403|HTTP\s*403)")
@@ -584,9 +597,9 @@ def rerun_all(update_mode: Optional[str] = None) -> int:
         while pending and round_no < 3:
             round_no += 1
             if round_no > 1:
-                # 2026-09-16 缩短为 60~120 秒（O2 批次 cookie 复用 + 浏览器
-                # 通道后，失败多为瞬时原因，无需小时级等待）。
-                cooldown = random.randint(60, 120)
+                # 重试轮冷却：仅失败路径运行，保持 60~120 秒（依据见
+                # _RETRY_ROUND_COOLDOWN_RANGE_SEC 常量注释）。
+                cooldown = random.randint(*_RETRY_ROUND_COOLDOWN_RANGE_SEC)
                 console.print(
                     f"[dim]重试轮冷却：上一轮 {len(pending)} 个任务失败，"
                     f"{cooldown} 秒后开始第 {round_no}/3 轮（仅重跑失败任务）……[/dim]"
@@ -597,9 +610,9 @@ def rerun_all(update_mode: Optional[str] = None) -> int:
             for i, (_key, path) in enumerate(pending, 1):
                 if i > 1:
                     # 风控冷却：任务间随机间隔，削弱固定节奏的机器特征。
-                    # 2026-09-16 缩短为 60~120 秒——post 链路已改走浏览器
-                    # 通道（列表/profile 均不经 Argus），长冷却失去前提。
-                    cooldown = random.randint(60, 120)
+                    # 2026-09-18 缩短为 30~60 秒（依据与风险标注见
+                    # _TASK_COOLDOWN_RANGE_SEC 常量注释）。
+                    cooldown = random.randint(*_TASK_COOLDOWN_RANGE_SEC)
                     console.print(f"[dim]风控冷却：{cooldown} 秒后开始下一个任务……[/dim]")
                     time.sleep(cooldown)
                 try:
