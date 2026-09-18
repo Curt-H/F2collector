@@ -243,6 +243,27 @@ def test_rerun_incremental_uses_real_conf_and_window(monkeypatch, tmp_path):
     assert args[args.index("-i") + 1].startswith("2026-09-15|")  # 注入增量窗口
 
 
+# ── PATH-1：下载根目录相对路径 + 目录扁平化 ──
+
+
+def test_download_dir_is_relative():
+    dd = apps.PLATFORMS["douyin"]["download_dir"]
+    assert not Path(dd).is_absolute()  # 配置里不再出现指向旧根的绝对路径
+    advanced_path = dict(
+        (k, d) for k, _t, _l, d in apps.PLATFORMS["douyin"]["advanced"]
+    )["path"]
+    assert not Path(advanced_path).is_absolute()  # 高级默认同样是相对值
+
+
+def test_create_user_folder_flat(tmp_path):
+    from f2.apps.douyin.utils import create_user_folder
+
+    user_path = create_user_folder({"path": str(tmp_path), "mode": "post"}, "某账户")
+    assert user_path == (tmp_path / "某账户").resolve()  # 无 douyin/post 中间层
+    assert user_path.is_dir()
+    assert not (tmp_path / "douyin").exists()
+
+
 # ── f2 日志：file_only 记录只进文件不上控制台（NOISE-1）──
 
 

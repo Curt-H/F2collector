@@ -262,7 +262,8 @@ def _write_unfinished_manifest(platform_key: str) -> None:
     删除；下次运行对应任务时会自动跳过已完成文件并从断点续传补齐。
     """
     plat = get_platform(platform_key)
-    download_dir = plat["download_dir"]
+    # PATH-1：download_dir 为相对路径，按工具根解析（进程 CWD 可能不同）
+    download_dir = TOOL_ROOT / plat["download_dir"]
     if not download_dir.exists():
         return
     tmp_files = sorted(download_dir.rglob("*.tmp"))
@@ -291,7 +292,8 @@ def _cleanup_desc_files(platform_key: str) -> int:
     douyin 端因 conf desc=false 本就不生成，此清理对 douyin 是无害空扫描。
     """
     plat = get_platform(platform_key)
-    download_dir = plat["download_dir"]
+    # PATH-1：download_dir 为相对路径，按工具根解析（进程 CWD 可能不同）
+    download_dir = TOOL_ROOT / plat["download_dir"]
     if not download_dir.exists():
         return 0
     removed = 0

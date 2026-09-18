@@ -1573,10 +1573,10 @@ def create_user_folder(kwargs: dict, nickname: Union[str, int]) -> Path:
     # 创建基础路径
     base_path = Path(kwargs.get("path", "Download"))
 
-    # 添加下载模式和用户名
-    user_path = (
-        base_path / "douyin" / kwargs.get("mode", "PLEASE_SETUP_MODE") / str(nickname)
-    )
+    # 本地补丁(f2dl, PATH-1 2026-09-18)：去掉 "douyin"/mode 中间层，目录
+    # 扁平化为 <下载根>/<账户昵称>/——配置的 path 即下载根，不再追加
+    # 平台名与模式子目录；相对路径由运行时 CWD（f2dl 已固定为工具根）解析。
+    user_path = base_path / str(nickname)
 
     # 获取绝对路径并确保它存在
     resolve_user_path = user_path.resolve()

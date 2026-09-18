@@ -36,7 +36,7 @@ DOUYIN_ADVANCED = [
     ("desc", "bool", "保存视频文案", False),
     ("lyric", "bool", "保存原声歌词(.lrc)", False),
     ("naming", "str", "文件命名规则", "{create}_{aweme_id}"),
-    ("path", "str", "下载根目录", str(TOOL_ROOT / "Download" / "dy")),
+    ("path", "str", "下载根目录", "Download"),  # PATH-1：相对路径（相对工具根）
     ("max_counts", "int", "最大下载数(0不限)", 0),
     ("max_tasks", "int", "异步任务数", 10),
     ("max_connections", "int", "并发连接数", 5),
@@ -51,7 +51,9 @@ PLATFORMS = {
         "modes": DOUYIN_MODES,
         "conf_dir": TOOL_ROOT / "dy" / "conf",
         "cookie_file": TOOL_ROOT / "dy" / "cookie.yaml",
-        "download_dir": TOOL_ROOT / "Download" / "dy",
+        # PATH-1(2026-09-18)：相对路径（相对工具根；runner 已把 f2 子进程
+        # CWD 固定为工具根），项目搬迁/换机不再产生指向旧根的绝对路径。
+        "download_dir": Path("Download"),
         "advanced": DOUYIN_ADVANCED,
     },
 }

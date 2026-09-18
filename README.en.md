@@ -37,7 +37,7 @@ python app.py -u "<link>" -M post --gen-only   # generate config only
 ```
 
 - Task configs live in `dy\conf\<task>.yaml` — **re-running the same command performs an incremental update**
-- Downloads go to `Download\dy\`
+- Downloads go to `Download\<account>\` (configs store a tool-root-relative path)
 - Advanced options (download dir, naming, concurrency...) are available in the wizard's advanced submenu
 
 ## First run
