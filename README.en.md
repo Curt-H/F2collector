@@ -29,11 +29,11 @@ pip install -r requirements.txt
 
 ```powershell
 python app.py                                  # interactive wizard
-python app.py cookie -p douyin                 # grab the platform cookie from browser (close the browser first)
-python app.py cookie -p douyin --import-f2     # import cookie from an old f2 config
-python app.py -p douyin -u "https://www.douyin.com/user/MS4wLjAB..." -M post
+python app.py cookie                           # grab the platform cookie from browser (close the browser first)
+python app.py cookie --import-f2               # import cookie from an old f2 config
+python app.py -u "https://www.douyin.com/user/MS4wLjAB..." -M post
 python app.py -p weibo  -u "https://weibo.com/u/1234567890" -M post
-python app.py -p douyin -u "<link>" -M post --gen-only   # generate config only
+python app.py -u "<link>" -M post --gen-only   # generate config only
 ```
 
 - Task configs live in `dy\conf\<task>.yaml` — **re-running the same command performs an incremental update**
@@ -42,7 +42,7 @@ python app.py -p douyin -u "<link>" -M post --gen-only   # generate config only
 
 ## First run
 
-1. Run `python app.py cookie -p douyin` and follow the prompt to grab the cookie from your browser (close that browser first)
+1. Run `python app.py cookie` and follow the prompt to grab the cookie from your browser (close that browser first)
 2. Every task will then reuse the stored cookie automatically
 
 ## Layout

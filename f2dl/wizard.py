@@ -42,13 +42,6 @@ def run_wizard(browser: str = "firefox") -> None:
 
 # ---------------------------------------------------------------- 新任务
 
-def _pick_platform(default: str = "douyin") -> str:
-    keys = list(PLATFORMS)
-    lines = "  ".join(f"{i + 1}.{k}({PLATFORMS[k]['label']})" for i, k in enumerate(keys))
-    console.print(f"选择平台: {lines}")
-    return click.prompt("平台", type=click.Choice(keys), default=default)
-
-
 def _choose_mode(plat: dict) -> str:
     modes = plat["modes"]
     if len(modes) == 1:
@@ -109,7 +102,8 @@ def _advanced_menu(plat: dict, current: dict) -> dict:
 
 
 def _new_task(browser: str) -> None:
-    plat_key = _pick_platform()
+    # 工具已单平台特化（PLATFORMS 仅注册 douyin），不再询问平台。
+    plat_key = "douyin"
     plat = get_platform(plat_key)
     url = click.prompt("请粘贴链接").strip()
     if not url:
@@ -189,7 +183,8 @@ def _rerun(browser: str = "firefox") -> None:
 # ---------------------------------------------------------------- Cookie
 
 def _cookie_menu(browser: str) -> None:
-    plat_key = _pick_platform()
+    # 工具已单平台特化（PLATFORMS 仅注册 douyin），不再询问平台。
+    plat_key = "douyin"
     plat = get_platform(plat_key)
     current = cookie_mod.load_cookie(plat_key)
     console.print(f"当前 cookie: {cookie_mod.mask(current)}")

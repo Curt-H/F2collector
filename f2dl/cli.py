@@ -13,7 +13,8 @@ from .apps import BROWSERS, PLATFORMS
     invoke_without_command=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-@click.option("-p", "--platform", type=click.Choice(list(PLATFORMS)), help="平台：douyin")
+@click.option("-p", "--platform", default="douyin", type=click.Choice(list(PLATFORMS)),
+    help="平台（工具已单平台特化，默认 douyin，通常无需指定）")
 @click.option("-u", "--url", help="链接：单作品链接或主页链接（配合 -M）")
 @click.option(
     "-M", "--mode",
@@ -37,12 +38,12 @@ def main(ctx, platform, url, mode, task_name, interval, browser, gen_only):
     """
     if ctx.invoked_subcommand is not None:
         return
-    if not url and not platform:
+    if not url:
         wizard.run_wizard(browser=browser)  # Q1=C：无参数进向导
         return
-    if not (platform and url and mode):
+    if not mode:
         raise click.UsageError(
-            "命令行下载需要 -p 平台、-u 链接、-M 模式 三项齐备（或都不带参数进入向导）"
+            "命令行下载需要 -u 链接、-M 模式 两项齐备（或都不带参数进入向导）"
         )
     try:
         rc = core.run_task(
@@ -86,7 +87,8 @@ def rerun_all_cmd():
 
 
 @main.command("cookie")
-@click.option("-p", "--platform", required=True, type=click.Choice(list(PLATFORMS)), help="平台")
+@click.option("-p", "--platform", default="douyin", type=click.Choice(list(PLATFORMS)),
+    help="平台（默认 douyin，通常无需指定）")
 @click.option("-b", "--browser", default="firefox", show_default=True,
     type=click.Choice(BROWSERS), help="cookie 抓取所用浏览器（Firefox 的 cookie 明文存储，最稳）")
 @click.option("--paste", "paste_flag", is_flag=True, default=False, help="手动粘贴 cookie（否则浏览器抓取）")
