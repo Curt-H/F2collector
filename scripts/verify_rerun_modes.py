@@ -4,7 +4,7 @@ import sys
 import types
 from pathlib import Path
 
-TOOL_ROOT = Path(__file__).resolve().parent
+TOOL_ROOT = Path(__file__).resolve().parents[1]  # scripts/ 下上跳一级到仓库根
 sys.path.insert(0, str(TOOL_ROOT))
 
 try:

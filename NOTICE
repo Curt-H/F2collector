@@ -27,7 +27,7 @@ local modifications:
     derives the user folder from the works list itself, skipping the
     profile endpoint entirely (O3); the Playwright browser instance is
     kept alive across sessions within a process (W1)
-    (verified 2026-09-15, see `probe_browser_post.py` /
-    `verify_browser_filter.py`)
+    (verified 2026-09-15, see `scripts/probe_browser_post.py` /
+    `scripts/verify_browser_filter.py`)
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).

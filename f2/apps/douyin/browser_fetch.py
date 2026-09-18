@@ -14,8 +14,8 @@ Set-Cookie 颁发 msToken",2026-09-11 实测 6 种组合均不颁发,2026-09-17
 用 Playwright 驱动 Firefox 打开用户主页,由页面自身 JS 在真实浏览器
 环境(TLS/HTTP2/指纹全真)现场生成 msToken/a_bogus 并发起列表请求,
 Python 仅旁路拦截响应(page.on("response")),完全不参与签名与请求
-构造。P0 探针(probe_browser_post.py)实证:同一风控窗口内无头/有头
-4/4 全 200,verify_browser_filter.py 验证拦截 JSON 可零改动通过
+构造。P0 探针(scripts/probe_browser_post.py)实证:同一风控窗口内无头/有头
+4/4 全 200,scripts/verify_browser_filter.py 验证拦截 JSON 可零改动通过
 UserPostFilter 解析。
 
 全自动滚动语义(2026-09-16 共识):

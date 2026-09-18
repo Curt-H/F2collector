@@ -10,7 +10,7 @@ from f2.i18n.translator import _
 from f2.log.logger import logger
 from f2.dl.base_downloader import BaseDownloader
 from f2.utils.utils import get_timestamp, timestamp_2_str, filter_by_date_interval
-from f2.apps.douyin.db import AsyncUserDB
+from f2.apps.douyin.db import AsyncUserDB, USER_DB_PATH
 from f2.apps.douyin.utils import format_file_name, json_2_lrc
 from f2.cli.cli_console import RichConsoleManager
 
@@ -35,7 +35,7 @@ class DouyinDownloader(BaseDownloader):
             aweme_id (int): 作品id (aweme_id)
         """
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             await db.update_user_info(sec_user_id=sec_user_id, last_aweme_id=aweme_id)
 
     async def create_download_tasks(

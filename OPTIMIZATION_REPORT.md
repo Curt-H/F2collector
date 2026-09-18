@@ -121,6 +121,10 @@
 
 **备注**：根治 PoolTimeout 可把连接池提到与 max_tasks 一致，但会加大 CDN 并发暴露面（风控）且重试已自愈，按 Q6a 纪律维持现状。
 
+### ROOT-1. 根目录清理（2026-09-18）
+
+按账号所有者决策：根目录只保留主入口 `dydl.py` 与文档/授权/依赖声明，功能目录不动。探针与验证/e2e 脚本全部 `git mv` 至 `scripts/`（保留改名历史；scripts 内互相 import 不受影响，各脚本 `TOOL_ROOT` 改为 `parents[1]`）；删除 httpx 时代历史探针 `probe_douyin_risk.py`/`v2`（使命终结、零代码引用，git 历史可找回）；引擎 DB 路径由 CWD 相对改为 `f2dl/_cache/` 绝对路径（`USER_DB_PATH`/`VIDEO_DB_PATH` 常量，handler/dl 全部调用点替换，现有 douyin_users.db 已迁移）；根级 `__pycache__/`、`.pytest_cache/` 清理并补 `.gitignore`。NOTICE 与 browser_fetch 的验证记录引用同步更新路径。
+
 ## 复核与回滚
 
 ```powershell

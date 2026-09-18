@@ -1,6 +1,15 @@
 # path: f2/apps/douyin/db.py
 
+from pathlib import Path
+
 from f2.db.base_db import BaseDB
+
+# 本地补丁(f2dl, ROOT-1 根目录清理 2026-09-18)：DB 文件以绝对路径放入
+# f2dl 运行时缓存目录（.gitignore 已覆盖），不再以 CWD 相对路径散落
+# 仓库根；DB 内容为昵称缓存/断点游标，迁移期间最多重建、无数据损失。
+_TOOL_ROOT = Path(__file__).resolve().parents[3]  # f2/apps/douyin/db.py → 仓库根
+USER_DB_PATH = str(_TOOL_ROOT / "f2dl" / "_cache" / "douyin_users.db")
+VIDEO_DB_PATH = str(_TOOL_ROOT / "f2dl" / "_cache" / "douyin_videos.db")
 
 
 class AsyncUserDB(BaseDB):

@@ -15,7 +15,12 @@ from f2.i18n.translator import _
 from f2.utils.decorators import mode_handler, mode_function_map
 from f2.apps.bark.handler import BarkHandler
 from f2.apps.bark.utils import ClientConfManager as BarkClientConfManager
-from f2.apps.douyin.db import AsyncUserDB, AsyncVideoDB
+from f2.apps.douyin.db import (
+    AsyncUserDB,
+    AsyncVideoDB,
+    USER_DB_PATH,
+    VIDEO_DB_PATH,
+)
 from f2.apps.douyin.crawler import DouyinCrawler, DouyinWebSocketCrawler
 from f2.apps.douyin.dl import DouyinDownloader
 from f2.apps.douyin.model import (
@@ -332,12 +337,12 @@ class DouyinHandler:
             logger.error(e)
             return
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(
                 self.kwargs, aweme_data.sec_user_id, db
             )
 
-        async with AsyncVideoDB("douyin_videos.db") as db:
+        async with AsyncVideoDB(VIDEO_DB_PATH) as db:
             await self.get_or_add_video_data(
                 aweme_data._to_dict(), db, self.ignore_fields
             )
@@ -470,7 +475,7 @@ class DouyinHandler:
 
         # 获取用户数据并返回创建用户目录
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
-        async with AsyncUserDB("douyin_users.db") as udb:
+        async with AsyncUserDB(USER_DB_PATH) as udb:
             # 本地补丁(O3)：目录创建挪到首份列表数据之后——直接用作品自带
             # 的作者信息建目录/写库，post 模式完全省掉 profile 请求（少一次
             # Argus 往返；风控窗口内也不会因 profile 失败而阻断任务）。
@@ -664,7 +669,7 @@ class DouyinHandler:
 
         # 获取用户数据并返回创建用户目录
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for aweme_data_list in self.fetch_user_like_videos(
@@ -790,7 +795,7 @@ class DouyinHandler:
         # 为避免将文件下载到其他人的文件夹下，请务必确保填写的URL是你自己的主页URL。
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for aweme_data_list in self.fetch_user_music_collection(
@@ -901,7 +906,7 @@ class DouyinHandler:
         # 为避免将文件下载到其他人的文件夹下，请务必确保填写的URL是你自己的主页URL。
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for aweme_data_list in self.fetch_user_collection_videos(
@@ -1017,7 +1022,7 @@ class DouyinHandler:
         # 为避免将文件下载到其他人的文件夹下，请务必确保填写的URL是你自己的主页URL。
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for collects in self.fetch_user_collects(
@@ -1300,7 +1305,7 @@ class DouyinHandler:
             sec_user_id = aweme_data.sec_user_id
             mix_id = aweme_data.mix_id
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for aweme_data_list in self.fetch_user_mix_videos(
@@ -1424,7 +1429,7 @@ class DouyinHandler:
             logger.info(_("直播：{0} 已结束").format(webcast_id))
             return
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         await self.downloader.create_stream_tasks(
@@ -1594,7 +1599,7 @@ class DouyinHandler:
 
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for aweme_data_list in self.fetch_user_feed_videos(
@@ -1711,7 +1716,7 @@ class DouyinHandler:
         aweme_id = await AwemeIdFetcher.get_aweme_id(self.kwargs.get("url"))
         aweme_data = await self.fetch_one_video(aweme_id)
 
-        async with AsyncUserDB("douyin_users.db") as udb:
+        async with AsyncUserDB(USER_DB_PATH) as udb:
             user_path = (
                 await self.get_or_add_user_data(
                     self.kwargs, aweme_data.sec_user_id, udb
@@ -1825,7 +1830,7 @@ class DouyinHandler:
         max_counts = self.kwargs.get("max_counts")
         sec_user_id = await SecUserIdFetcher.get_sec_user_id(self.kwargs.get("url"))
 
-        async with AsyncUserDB("douyin_users.db") as db:
+        async with AsyncUserDB(USER_DB_PATH) as db:
             user_path = await self.get_or_add_user_data(self.kwargs, sec_user_id, db)
 
         async for aweme_data_list in self.fetch_friend_feed_videos(
