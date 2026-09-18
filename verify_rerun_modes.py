@@ -46,6 +46,11 @@ core._batch_get_cookie = lambda pk, browser: "fake_cookie"
 
 def _fake_retry(args, platform_key="", task_label=""):
     captured["args"] = list(args)
+    # 快照本次实际传给 f2 的配置内容（FULL-1 回归测试用）
+    _c_path = Path(args[args.index("-c") + 1]) if "-c" in args else None
+    captured["conf_snapshot"] = (
+        yaml.safe_load(_c_path.read_text(encoding="utf-8")) if _c_path else None
+    )
     return 0
 
 
@@ -154,6 +159,36 @@ except ValueError as exc:
 except Exception as exc:  # noqa: BLE001
     print(f"[G_bad_mode] ❌ 异常类型错误: {type(exc).__name__}")
     ok = False
+
+# ── H：全量模式跑剥离 last_run 的临时配置副本（FULL-1 回归）──
+# 引擎双轨语义会把 "interval=all + last_run" 解释成增量下限，导致全量被
+# last_run 静默截断。修复后：全量的 -c 指向剥离 last_run 的临时副本，
+# 真实配置的 last_run/interval 不动，临时文件用后即删。
+PROMPT_RET["v"] = "2"
+conf = make_conf("h_full_temp", last_run=LR, interval="2024-01-01|2024-12-31")
+rc = core.rerun_task(conf, browser="firefox", update_mode="full")
+args = captured["args"]
+snap = (captured.get("conf_snapshot") or {}).get("douyin") or {}
+run_conf_path = Path(args[args.index("-c") + 1]) if "-c" in args else None
+real = yaml.safe_load(conf.read_text(encoding="utf-8"))["douyin"]
+h_temp_stripped = "last_run" not in snap  # 临时副本无 last_run
+h_temp_interval = snap.get("interval") == "2024-01-01|2024-12-31"  # 副本保留原区间
+h_temp_cleaned = run_conf_path is not None and not run_conf_path.exists()  # 用后即删
+h_all = "-i" in args and args[args.index("-i") + 1] == "all"
+h_real_interval = real.get("interval") == "2024-01-01|2024-12-31"  # 原值不动
+h_real_advanced = bool(real.get("last_run")) and real.get("last_run") != LR  # 照常推进
+report_h = (
+    rc == 0 and h_all and h_temp_stripped and h_temp_interval
+    and h_temp_cleaned and h_real_interval and h_real_advanced
+)
+print(f"[H_full_temp_conf] rc={rc}, -i={get_i_value(args)}, -c={run_conf_path}")
+print(
+    f"[H_full_temp_conf] 临时副本无last_run: {h_temp_stripped}, "
+    f"副本保留原区间: {h_temp_interval}, 用后即删: {h_temp_cleaned}, "
+    f"真实配置区间不动: {h_real_interval}, last_run 已推进: {h_real_advanced}"
+)
+print("[H_full_temp_conf] ✅" if report_h else "[H_full_temp_conf] ❌")
+ok = ok and report_h
 
 print("=" * 60)
 print("全部通过 ✅" if ok else "存在失败 ❌")

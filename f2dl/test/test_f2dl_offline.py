@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+import yaml
 
 TOOL_ROOT = Path(__file__).resolve().parents[2]
 if str(TOOL_ROOT) not in sys.path:
@@ -166,3 +167,76 @@ def test_paste_cookie_rejects_before_write():
         cookie_mod.paste_cookie("douyin", "too-short")
     with pytest.raises(ValueError):
         cookie_mod.paste_cookie("douyin", "no-semicolon-value-but-long-enough")
+
+
+# ── core.rerun_task：全量跑剥离 last_run 的临时副本；增量用真实配置 ──
+# （FULL-1 缺陷修复回归测试，2026-09-17）
+
+
+def _write_task_conf(path, interval, last_run):
+    section = {
+        "url": "https://www.douyin.com/user/MS4wLjABAAAA" + "x" * 20,
+        "mode": "post",
+        "interval": interval,
+    }
+    if last_run:
+        section["last_run"] = last_run
+    confgen.save_conf(path, {"douyin": section})
+
+
+def test_rerun_full_uses_temp_conf_without_last_run(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_retry(args, platform_key="", task_label=""):
+        captured["args"] = list(args)
+        c_path = Path(args[args.index("-c") + 1]) if "-c" in args else None
+        captured["conf"] = (
+            yaml.safe_load(c_path.read_text(encoding="utf-8")) if c_path else None
+        )
+        return 0
+
+    monkeypatch.setattr(core, "_run_with_retry", fake_retry)
+    monkeypatch.setattr(core, "_obtain_cookie", lambda pk, b, interactive=True: "ck")
+    monkeypatch.setattr(core, "_cleanup_desc_files", lambda pk: 0)
+    monkeypatch.setattr(core, "_write_unfinished_manifest", lambda pk: None)
+
+    conf = tmp_path / "task.yaml"
+    _write_task_conf(
+        conf, interval="2024-01-01|2024-12-31", last_run="2026-09-15 13:54:54"
+    )
+
+    rc = core.rerun_task(conf, interactive=False, update_mode="full")
+    assert rc == 0
+    args = captured["args"]
+    assert args[args.index("-i") + 1] == "all"
+    snap = (captured.get("conf") or {}).get("douyin") or {}
+    assert "last_run" not in snap  # 临时副本剥离 last_run（FULL-1）
+    assert snap.get("interval") == "2024-01-01|2024-12-31"  # 副本保留原区间
+    real = yaml.safe_load(conf.read_text(encoding="utf-8"))["douyin"]
+    assert real["interval"] == "2024-01-01|2024-12-31"  # 真实配置原值不动
+    assert real["last_run"] != "2026-09-15 13:54:54"  # 成功后照常推进
+
+
+def test_rerun_incremental_uses_real_conf_and_window(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_retry(args, platform_key="", task_label=""):
+        captured["args"] = list(args)
+        captured["conf_path"] = (
+            Path(args[args.index("-c") + 1]) if "-c" in args else None
+        )
+        return 0
+
+    monkeypatch.setattr(core, "_run_with_retry", fake_retry)
+    monkeypatch.setattr(core, "_obtain_cookie", lambda pk, b, interactive=True: "ck")
+    monkeypatch.setattr(core, "_cleanup_desc_files", lambda pk: 0)
+    monkeypatch.setattr(core, "_write_unfinished_manifest", lambda pk: None)
+
+    conf = tmp_path / "task.yaml"
+    _write_task_conf(conf, interval="all", last_run="2026-09-15 13:54:54")
+
+    rc = core.rerun_task(conf, interactive=False, update_mode="incremental")
+    assert rc == 0
+    assert captured["conf_path"] == conf  # 增量直用真实配置（不建临时副本）
+    args = captured["args"]
+    assert args[args.index("-i") + 1].startswith("2026-09-15|")  # 注入增量窗口

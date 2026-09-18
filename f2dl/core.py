@@ -5,6 +5,7 @@ cookie 生命周期（Q2b/Q3b/Q4a 共识）：配置文件 cookie 字段永久�
 （无论成败/中断）一律清空 cookie 存储，下个任务启动时重新抓取。
 """
 
+import copy
 import re
 import sys
 import time
@@ -415,6 +416,11 @@ def rerun_task(
     - "full"（全量）：注入 -i all 临时覆盖任何区间，从最早作品全量扫描；
       已下载文件仍按存在性自动跳过（全量≠重新下载），受 30 分钟滚动
       预算保护。配置文件中的 interval 原值任何情况下都不被修改。
+      缺陷修复(2026-09-17, FULL-1)：全量改跑剥离 last_run 的临时配置副本
+      ——引擎双轨语义会把"interval=all + last_run"解释成增量下限，直接
+      传真实配置会让全量被静默截断成增量（主页计数核对也因
+      min_cursor!=0 不运行）；临时副本使引擎落入"皆无=0"全量轨，核对
+      激活，真实配置的 last_run/interval 不受影响，成功后照常回写推进。
     update_mode=None 且 interactive 且非批次时，重跑前交互询问（回车默认
     增量）；任务无 last_run 记录时增量与全量等价，不询问直接全量；
     非交互场景未指定时默认增量（自动化脚本兼容）。任务成功后 last_run
@@ -472,13 +478,29 @@ def rerun_task(
 
     # 按重跑方式构建区间参数：
     extra_args: List[str] = []
+    # 本次运行实际传给 f2 的配置文件：全量模式指向剥离 last_run 的临时
+    # 副本（见下），其余模式指向真实任务配置。
+    run_conf: Path = conf_file
     if update_mode == "full":
         # 全量：-i all 临时覆盖任何显式区间（CLI 参数优先级最高，
-        # 配置文件中的 interval 原值不动）
+        # 配置文件中的 interval 原值不动）。
         extra_args = ["-i", "all"]
+        # 缺陷修复(2026-09-17, FULL-1)：引擎双轨语义
+        # (handler.handle_user_post) 把 "interval=all + conf 含 last_run"
+        # 解释为增量窗口下限——直接传真实配置会让全量被 last_run 静默
+        # 截断成增量，且主页计数核对 (min_cursor==0 门控) 不会运行。
+        # 改为针对剥离 last_run 的临时副本运行：引擎落入"皆无=0"全量轨，
+        # 核对激活；真实配置的 last_run/interval 均不受影响，成功后
+        # last_run 照常回写推进。
+        full_data = copy.deepcopy(data)
+        full_section = next(iter(full_data.values()), None)
+        if isinstance(full_section, dict):
+            full_section.pop("last_run", None)
+        run_conf = confgen.write_temp_conf(platform_key, full_data)
         console.print(
             "[dim]全量更新：扫描全部作品（已下载自动跳过，"
-            "滚动受 30 分钟预算保护）……[/dim]"
+            "滚动受 30 分钟预算保护；临时配置已剥离 last_run，"
+            "引擎按零窗口下限全量扫描并核对主页计数）……[/dim]"
         )
     elif explicit_interval:
         # 增量 + 显式区间任务：尊重原区间，不注入 last_run 窗口
@@ -498,11 +520,13 @@ def rerun_task(
     console.rule(f"重跑任务 · {conf_file.name}")
     try:
         rc = _run_with_retry(
-            [alias, *extra_args, "-c", str(conf_file)],
+            [alias, *extra_args, "-c", str(run_conf)],
             platform_key=platform_key,
             task_label=conf_file.stem,
         )
     finally:
+        if run_conf != conf_file:
+            run_conf.unlink(missing_ok=True)  # 全量临时副本即用即删
         # Q3b：无论成败/中断，任务路径结束必清空 cookie 存储；
         # 批次模式(O2)例外——留存复用，由 rerun_all 批次结束统一清空。
         if batch_mode:

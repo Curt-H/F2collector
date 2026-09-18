@@ -16,6 +16,7 @@
 | `3420f9d` | D1+C5+D4+C6+C4/C3：超时转换 / 原子写配置 / 403 文案 / 裸 except / cookie 简化与守卫 |
 | `cd11c2a` | C2+C3+F1：删除冻结的 token_refresh / 微博残留 / 陈旧产物；文档对齐 |
 | `03aa52f` | E1：联网 e2e 移出 pytest 收集 / 新增 12 个离线单测 / verify 脚本跨日修复 |
+| （后补） | FULL-1：全量更新被 last_run 静默截断成增量——全量改跑剥离 last_run 的临时副本（见文末「缺陷修复」） |
 
 **验证结果**：`pytest f2dl/test/test_f2dl_offline.py` → 12/12 通过；`verify_rerun_modes.py` → 7/7 通过（exit 0）；全部触及文件 py_compile 通过；项目运行时（便携 Python 3.11.9）import 冒烟通过。
 
@@ -94,10 +95,24 @@
 
 **未发现证据充分、值得调整的参数。** 逐项核过：任务间冷却 60~120s、滚动 CD 5~15s（`_SCROLL_CD_RANGE_SEC`）、30 分钟滚动预算、续滚上限、httpx 8 次紧凑重试（`crawler.py` 的 99.6% 概率覆盖计算）、`_COMPACT_BACKOFF_SEC=(0.3,0.5,0.8)` 与 `_ANTI_RISK_BACKOFF_SEC` 双轨——全部有实测注释背书，且 post 链路已绕开 Argus 网关。唯一的省时项 B1 是逻辑修复而非调参（省纯等待，不减请求）。post 模式的 `page_interval=45s` 仅作用于 httpx 模式翻页（post 走浏览器通道后不再触发），维持上游值。
 
+## 缺陷修复（2026-09-17，报告交付后用户实测发现）
+
+### FULL-1. 全量更新被 last_run 静默截断成增量（已修复）
+
+**现象**：重跑已有任务选"全量更新"（或 `rerun-all` 选全量），实际仍只拉上次运行后的新作品。
+
+**根因**：`-i all` 被两代特性反向解释——引擎双轨语义（`handler.py:458-469`）把 "interval=all + conf 含 last_run" 解释为增量窗口下限（为 run_task 重跑同命令路径设计，必须保留），而双模式重跑用 `-i all` 作全量信号。全量运行时真实配置仍携带 last_run → min_cursor=last_run → 浏览器通道按阈值停止滚动并逐条剔除旧作品；主页计数核对（`min_cursor == 0` 门控，`browser_fetch.py:703`）也不运行，截断完全静默。`verify_rerun_modes.py` 的 B/D 场景只断言 CLI 参数（mock 引擎调用），未穿透到该逻辑，故未拦截。
+
+**修复**：全量模式改跑剥离 last_run 的临时配置副本（复用 `confgen.write_temp_conf` 先例）：引擎落入"皆无=0"全量轨 → 真全量扫描 + 主页计数核对自动激活；真实配置 last_run/interval 不受影响，成功后照常推进。增量路径零改动；引擎零改动。
+
+**否决的备选**：改双轨语义（摧毁"重跑同命令即增量"主工作流）；`-i "2000-01-01|今天"` 技巧（显式轨 min_cursor≈0 但核对门控永不触发）；给 f2 CLI 加 full 标志（vendored CLI 面改动更大）。
+
+**回归覆盖**：`verify_rerun_modes.py` 新增场景 H（全量 `-c` 临时副本无 last_run / `-i all` / 真实配置 last_run 推进且 interval 不动 / 临时文件即用即删）；离线单测新增 `test_rerun_full_uses_temp_conf_without_last_run` / `test_rerun_incremental_uses_real_conf_and_window`。
+
 ## 复核与回滚
 
 ```powershell
-git log --oneline            # 6 个提交，线性可回退
+git log --oneline            # 线性提交，任一步可单独回退
 git revert <sha>             # 任一步可单独回退
 python -m pytest f2dl/test/test_f2dl_offline.py -q   # 12 passed
 python verify_rerun_modes.py                          # 7 场景全过
