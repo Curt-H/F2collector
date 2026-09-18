@@ -10,7 +10,7 @@
 
 cookie 文件结构与 f2 完全一致：{"douyin": {"cookie": "..."}}，
 这样 f2 --auto-cookie -c <file> 可以直接写入我们约定的文件。
-本模块的手动入口（dydl.py cookie / 向导菜单 3）仅用于诊断与救急。
+本模块的手动入口（app.py cookie / 向导菜单 3）仅用于诊断与救急。
 """
 
 import os

@@ -32,11 +32,11 @@ pip install -r requirements.txt
 ## 使用
 
 ```powershell
-python dydl.py                                  # 交互向导
-python dydl.py cookie -p douyin                 # 手动抓取平台 cookie（仅诊断/救急；任务启动会自动重抓）
-python dydl.py cookie -p douyin --import-f2     # 从旧版 f2 的配置导入 cookie（手动迁移用）
-python dydl.py -p douyin -u "https://www.douyin.com/user/MS4wLjAB..." -M post
-python dydl.py -p douyin -u "<链接>" -M post --gen-only   # 仅生成配置不下载
+python app.py                                  # 交互向导
+python app.py cookie -p douyin                 # 手动抓取平台 cookie（仅诊断/救急；任务启动会自动重抓）
+python app.py cookie -p douyin --import-f2     # 从旧版 f2 的配置导入 cookie（手动迁移用）
+python app.py -p douyin -u "https://www.douyin.com/user/MS4wLjAB..." -M post
+python app.py -p douyin -u "<链接>" -M post --gen-only   # 仅生成配置不下载
 ```
 
 - 任务配置持久化在 `dy\conf\<任务>.yaml`，**重跑同一命令即增量追更**

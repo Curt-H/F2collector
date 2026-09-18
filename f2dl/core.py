@@ -633,7 +633,7 @@ def rerun_all(update_mode: Optional[str] = None) -> int:
                     if remaining:
                         console.print(
                             f"[yellow]剩余 {remaining} 个任务未尝试。关闭浏览器后重跑 "
-                            "[cyan]python dydl.py rerun-all[/cyan] 即可（已完成的不会重复下载）。[/yellow]"
+                            "[cyan]python app.py rerun-all[/cyan] 即可（已完成的不会重复下载）。[/yellow]"
                         )
                     return 1
                 except (ValueError, OSError) as exc:
