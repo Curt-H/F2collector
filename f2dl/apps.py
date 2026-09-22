@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 #: 工具根目录（F2test）
 TOOL_ROOT = Path(__file__).resolve().parent.parent
@@ -95,3 +95,28 @@ def sanitize_name(name: str) -> str:
     if cleaned.upper() in _WINDOWS_RESERVED:
         cleaned = "_" + cleaned
     return cleaned
+
+
+#: 抖音用户主页规范 URL 模板（判重与落盘统一用它，剥掉复制来源的追踪参数）
+_DOUYIN_USER_URL = "https://www.douyin.com/user/{sec_uid}"
+
+
+def canonical_user_url(platform_key: str, url: str) -> Optional[Tuple[str, str]]:
+    """主页链接 → (账号标识, 规范主页 URL)；非主页链接返回 None。
+
+    以账号主页为标准的防重复（Q-DEDUP，2026-09-22 共识）共用入口：
+    账号唯一键取首个标识模式的捕获组（抖音为 sec_user_id，URL 带追踪
+    参数也能稳定提取）；返回的规范 URL 剥掉 ?from_tab_name=... 等查询
+    参数——判重比较与配置落盘一律用它，消除"同一账号 URL 字面不同"的
+    隐患。作品链接/短链/无法识别 → None，调用方跳过判重。
+    """
+    patterns = _ID_PATTERNS.get(platform_key) or []
+    if not patterns:
+        return None
+    match = patterns[0].search(url or "")
+    if not match:
+        return None
+    key = match.group(1)
+    if platform_key == "douyin":
+        return key, _DOUYIN_USER_URL.format(sec_uid=key)
+    return None

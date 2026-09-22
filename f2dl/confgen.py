@@ -6,12 +6,12 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import yaml
 
 from . import runner
-from .apps import INTERVAL_MODES, TOOL_ROOT, get_platform, sanitize_name
+from .apps import INTERVAL_MODES, TOOL_ROOT, canonical_user_url, get_platform, sanitize_name
 
 _CACHE_DIR = TOOL_ROOT / "f2dl" / "_cache"
 
@@ -108,3 +108,47 @@ def write_temp_conf(platform_key: str, conf: dict) -> Path:
     path = directory / f"tmp_{plat['app']}_{int(time.time() * 1000)}.yaml"
     save_conf(path, conf)
     return path
+
+
+# ── 以账号主页为标准的防重复（Q-DEDUP，2026-09-22 共识）────────────────
+
+
+def account_key_of(platform_key: str, path: Path) -> Optional[str]:
+    """任务配置 → 账号标识（从其 url 字段提取 sec_user_id）。
+
+    配置缺失/损坏/无主页标识时返回 None——判重视为"无法识别"，不让
+    单个坏配置炸掉调用方（rerun-all 的批量防线同样依赖此函数）。
+    """
+    plat = get_platform(platform_key)
+    try:
+        section = (load_conf(path) or {}).get(plat["app"]) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    norm = canonical_user_url(platform_key, str(section.get("url") or ""))
+    return norm[0] if norm else None
+
+
+def conf_index(platform_key: str) -> Dict[str, Path]:
+    """扫描任务配置目录：账号标识 → 配置路径（同账号多份时排序首个胜出）。"""
+    plat = get_platform(platform_key)
+    index: Dict[str, Path] = {}
+    if not plat["conf_dir"].exists():
+        return index
+    for path in sorted(plat["conf_dir"].glob("*.yaml")):
+        key = account_key_of(platform_key, path)
+        if key and key not in index:
+            index[key] = path
+    return index
+
+
+def find_conf_by_key(platform_key: str, account_key: str) -> Optional[Path]:
+    """按账号标识找已有任务配置（无 → None）。判重的唯一查询入口。"""
+    return conf_index(platform_key).get(account_key)
+
+
+def next_free_name(platform_key: str, base: str) -> str:
+    """别名撞车（不同账号同昵称）时取第一个不存在的 -N 后缀名（防静默覆盖）。"""
+    n = 1
+    while conf_path(platform_key, f"{base}-{n}").exists():
+        n += 1
+    return f"{base}-{n}"

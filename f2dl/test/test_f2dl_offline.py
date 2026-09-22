@@ -372,3 +372,148 @@ def test_file_only_records_skip_console_handler():
     for fh in file_handlers:
         assert passes(fh.filters, plain)
         assert passes(fh.filters, marked)
+
+
+# ── Q-DEDUP：以账号主页为标准的防重复（2026-09-22 共识）────────────────
+
+
+def test_canonical_user_url():
+    sec = "MS4wLjABAAAA" + "z" * 20
+    # 带追踪参数的主页链接 → (sec_uid, 无参数规范 URL)
+    key, canonical = apps.canonical_user_url(
+        "douyin", f"https://www.douyin.com/user/{sec}?from_tab_name=main&nt=0"
+    )
+    assert key == sec
+    assert canonical == f"https://www.douyin.com/user/{sec}"
+    # 作品链接 / 空链接 → None（不参与判重）
+    assert (
+        apps.canonical_user_url(
+            "douyin", "https://www.douyin.com/video/7298145681699622182"
+        )
+        is None
+    )
+    assert apps.canonical_user_url("douyin", "") is None
+
+
+def test_conf_index_find_and_next_free_name(monkeypatch, tmp_path):
+    monkeypatch.setitem(apps.PLATFORMS["douyin"], "conf_dir", tmp_path)
+    sec_a = "MS4wLjABAAAA" + "a" * 20
+    sec_b = "MS4wLjABAAAA" + "b" * 20
+    confgen.save_conf(
+        tmp_path / "甲.yaml",
+        {"douyin": {"url": f"https://www.douyin.com/user/{sec_a}?x=1"}},
+    )
+    confgen.save_conf(
+        tmp_path / "乙.yaml",
+        {"douyin": {"url": f"https://www.douyin.com/user/{sec_b}"}},
+    )
+    index = confgen.conf_index("douyin")
+    assert set(index) == {sec_a, sec_b}  # 带参 URL 也能索引
+    assert confgen.find_conf_by_key("douyin", sec_a).name == "甲.yaml"
+    assert confgen.find_conf_by_key("douyin", "MS4wLjABAAAAnope") is None
+    # 无 url / 损坏配置不炸、不进索引
+    confgen.save_conf(tmp_path / "坏.yaml", {"douyin": {}})
+    (tmp_path / "烂.yaml").write_text("douyin: [broken", encoding="utf-8")
+    assert confgen.conf_index("douyin") == index
+    # 别名撞车 → -1/-2 顺延
+    confgen.save_conf(tmp_path / "王心凌-1.yaml", {"douyin": {"url": "u"}})
+    assert confgen.next_free_name("douyin", "王心凌") == "王心凌-2"
+
+
+def test_run_task_reuses_existing_conf_for_same_account(monkeypatch, tmp_path):
+    monkeypatch.setitem(apps.PLATFORMS["douyin"], "conf_dir", tmp_path)
+    monkeypatch.setattr(confgen, "official_defaults", lambda pk: {})
+    captured = {}
+
+    def fake_retry(args, platform_key="", task_label=""):
+        captured["args"] = list(args)
+        c_path = Path(args[args.index("-c") + 1])
+        captured["path"] = c_path
+        captured["conf"] = yaml.safe_load(c_path.read_text(encoding="utf-8"))
+        return 0
+
+    monkeypatch.setattr(core, "_run_with_retry", fake_retry)
+    monkeypatch.setattr(core, "_obtain_cookie", lambda pk, b, interactive=True: "ck")
+    monkeypatch.setattr(core, "_cleanup_desc_files", lambda pk: 0)
+    monkeypatch.setattr(core, "_write_unfinished_manifest", lambda pk: None)
+
+    sec = "MS4wLjABAAAA" + "x" * 20
+    confgen.save_conf(
+        tmp_path / "甲.yaml",
+        {
+            "douyin": {
+                "url": f"https://www.douyin.com/user/{sec}?from_tab_name=main",
+                "mode": "post",
+                "interval": "all",
+                "last_run": "2026-09-20 08:00:00",
+                "page_counts": 999,  # 自定义高级值
+            }
+        },
+    )
+
+    # 换别名 + 带不同追踪参数的同一账号链接提交 → 复用「甲」，不新建文件
+    rc = core.run_task(
+        "douyin", f"https://www.douyin.com/user/{sec}?nt=2", "post", name="新别名"
+    )
+    assert rc == 0
+    assert captured["path"] == tmp_path / "甲.yaml"  # 复用已有任务
+    assert sorted(p.name for p in tmp_path.glob("*.yaml")) == ["甲.yaml"]  # 无重复文件
+    section = captured["conf"]["douyin"]
+    assert section["url"] == f"https://www.douyin.com/user/{sec}"  # 规范 URL 落盘
+    assert section["page_counts"] == 999  # 自定义高级值保留
+    assert section["last_run"] == "2026-09-20 08:00:00"  # 增量进度带入
+    args = captured["args"]
+    assert args[args.index("-i") + 1] == f"2026-09-20|{datetime.now():%Y-%m-%d}"
+
+
+def test_run_task_auto_suffix_on_name_collision(monkeypatch, tmp_path):
+    monkeypatch.setitem(apps.PLATFORMS["douyin"], "conf_dir", tmp_path)
+    monkeypatch.setattr(confgen, "official_defaults", lambda pk: {})
+    captured = {}
+
+    def fake_retry(args, platform_key="", task_label=""):
+        captured["path"] = Path(args[args.index("-c") + 1])
+        return 0
+
+    monkeypatch.setattr(core, "_run_with_retry", fake_retry)
+    monkeypatch.setattr(core, "_obtain_cookie", lambda pk, b, interactive=True: "ck")
+    monkeypatch.setattr(core, "_cleanup_desc_files", lambda pk: 0)
+    monkeypatch.setattr(core, "_write_unfinished_manifest", lambda pk: None)
+
+    sec_a = "MS4wLjABAAAA" + "a" * 20
+    sec_b = "MS4wLjABAAAA" + "b" * 20
+    confgen.save_conf(
+        tmp_path / "张三.yaml",
+        {"douyin": {"url": f"https://www.douyin.com/user/{sec_a}"}},
+    )
+
+    # 不同账号用了已占用的别名 → 自动 -1 后缀，原配置不动
+    rc = core.run_task(
+        "douyin", f"https://www.douyin.com/user/{sec_b}", "post", name="张三"
+    )
+    assert rc == 0
+    assert captured["path"] == tmp_path / "张三-1.yaml"
+    prev = yaml.safe_load((tmp_path / "张三.yaml").read_text(encoding="utf-8"))
+    assert prev["douyin"]["url"] == f"https://www.douyin.com/user/{sec_a}"  # 未被覆盖
+
+
+def test_rerun_all_skips_duplicate_accounts(monkeypatch, tmp_path):
+    monkeypatch.setitem(apps.PLATFORMS["douyin"], "conf_dir", tmp_path)
+    sec = "MS4wLjABAAAA" + "d" * 20
+    confgen.save_conf(
+        tmp_path / "A.yaml",
+        {"douyin": {"url": f"https://www.douyin.com/user/{sec}"}},
+    )
+    confgen.save_conf(
+        tmp_path / "B.yaml",
+        {"douyin": {"url": f"https://www.douyin.com/user/{sec}?x=1"}},
+    )
+    ran = []
+    monkeypatch.setattr(
+        core, "rerun_task", lambda path, **kw: ran.append(Path(path).name) or 0
+    )
+    monkeypatch.setattr(cookie_mod, "clear_cookie", lambda pk: None)
+
+    rc = core.rerun_all(update_mode="incremental")
+    assert rc == 0
+    assert ran == ["A.yaml"]  # 同账号重复配置只跑排序首个

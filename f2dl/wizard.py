@@ -13,7 +13,15 @@ from rich.table import Table
 
 from . import confgen, core, console
 from . import cookie as cookie_mod
-from .apps import BROWSERS, INTERVAL_MODES, PLATFORMS, extract_identifier, get_platform, sanitize_name
+from .apps import (
+    BROWSERS,
+    INTERVAL_MODES,
+    PLATFORMS,
+    canonical_user_url,
+    extract_identifier,
+    get_platform,
+    sanitize_name,
+)
 
 
 def run_wizard(browser: str = "firefox") -> None:
@@ -110,8 +118,29 @@ def _new_task(browser: str) -> None:
         console.print("[yellow]未输入链接，返回主菜单。[/yellow]")
         return
     mode = _choose_mode(plat)
+    # Q-DEDUP：主页链接先规范化（剥追踪参数）再提前判重——已入库账号直接
+    # 定位已有任务、跳过别名询问（高级设置子菜单也随之带上次值）；core.
+    # run_task 有同一判重的兜底（CLI 路径不经过向导）。one 模式走临时配置
+    # 不落盘，无需核验；提取不出账号标识（如短链）仅提醒。
+    existing_name = ""
+    if mode != "one":
+        norm = canonical_user_url(plat_key, url)
+        if norm:
+            _account_key, url = norm
+            existing = confgen.find_conf_by_key(plat_key, _account_key)
+            if existing:
+                existing_name = existing.stem
+                console.print(
+                    f"[yellow]该账号已入库为任务「{existing_name}」，"
+                    "本次将复用它追更（不新建重复配置）。[/yellow]"
+                )
+        else:
+            console.print("[yellow]无法从链接提取账号标识，将不做重复核验。[/yellow]")
     interval = _ask_interval(mode)
-    name = _ask_name(plat_key, url, mode)
+    if existing_name:
+        name = existing_name
+    else:
+        name = _ask_name(plat_key, url, mode)
     current = confgen.last_values(plat_key, name) if name else {}
     overrides = {}
     if click.confirm("进入高级设置？", default=False):

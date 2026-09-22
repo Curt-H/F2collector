@@ -25,6 +25,7 @@ from .apps import (
     INTERVAL_MODES,
     PLATFORMS,
     TOOL_ROOT,
+    canonical_user_url,
     extract_identifier,
     get_platform,
     sanitize_name,
@@ -331,6 +332,41 @@ def run_task(
     # Q17：one 模式一律用临时配置（即使能提取到作品 id 也不入库）
     is_temp = mode == "one"
 
+    # ── 以账号主页为标准的防重复（Q-DEDUP，2026-09-22 共识）──
+    # 主页链接先规范化（剥追踪参数）再判重/落盘；同账号已有任务 → 复用：
+    # 切换到已有任务名，last_run 与自定义设置由下方既有逻辑保留（幂等
+    # 追更，FOLLOW-1 批量粘贴场景重复提交无害）；别名被其他账号占用 →
+    # 自动加 -1/-2 后缀，不再静默覆盖。one 模式走临时配置不落盘，不参与。
+    if not is_temp:
+        norm = canonical_user_url(platform_key, url)
+        if norm:
+            account_key, url = norm
+            existing = confgen.find_conf_by_key(platform_key, account_key)
+            if existing and (
+                task_name is None
+                or existing != confgen.conf_path(platform_key, task_name)
+            ):
+                console.print(
+                    f"[yellow]该账号已入库为任务「{existing.stem}」，"
+                    "复用它追更，不新建重复配置。[/yellow]"
+                )
+                task_name = existing.stem
+            elif task_name is not None:
+                target = confgen.conf_path(platform_key, task_name)
+                if target.exists():
+                    prev_key = confgen.account_key_of(platform_key, target)
+                    if prev_key != account_key:
+                        new_name = confgen.next_free_name(platform_key, task_name)
+                        console.print(
+                            f"[yellow]别名「{task_name}」已被其他账号占用，"
+                            f"自动改用「{new_name}」（防静默覆盖）。[/yellow]"
+                        )
+                        task_name = new_name
+        else:
+            console.print(
+                "[yellow]无法从链接提取账号标识（如短链），跳过重复核验。[/yellow]"
+            )
+
     # last_run 读取与保留（douyin 端 interval 真实生效——handler 转分页游标）。
     # 必须在 build_conf 覆盖配置文件之前读取，并通过 overrides 保留写入——
     # 对所有持久任务生效（含失败场景：失败不更新，但旧值不得丢失）。
@@ -341,6 +377,21 @@ def run_task(
         if prev_path.exists():
             prev_section = confgen.load_conf(prev_path).get(plat["app"]) or {}
             last_run, window = _resolve_incremental(platform_key, prev_section)
+            # Q-DEDUP 复用语义：已有配置的自定义高级设置原样沿用（本次显式
+            # 传入的 overrides 优先），修复重跑把自定义值重置回官方默认的
+            # 隐性丢失；显式日期区间同理被尊重（与 rerun_task 语义一致）。
+            advanced_keys = {entry[0] for entry in plat["advanced"]}
+            preserved = {
+                k: v
+                for k, v in prev_section.items()
+                if k in advanced_keys and v not in (None, "")
+            }
+            if preserved:
+                overrides = {**preserved, **(overrides or {})}
+            if interval == "all":
+                prev_interval = str(prev_section.get("interval") or "all")
+                if prev_interval != "all":
+                    interval = prev_interval
         if last_run:
             overrides = dict(overrides or {})
             overrides.setdefault("last_run", last_run)
@@ -591,6 +642,24 @@ def rerun_all(update_mode: Optional[str] = None) -> int:
     if not tasks:
         console.print("[yellow]还没有任何已保存的任务配置。[/yellow]")
         return 0
+
+    # Q-DEDUP 防线：手工编辑配置等途径可能绕过创建时判重；同账号多份
+    # 配置只跑排序首个，其余告警跳过——防同一账号整批被跑两遍（双倍
+    # 请求暴露 + 冷却时间浪费）。
+    seen_accounts: Dict[str, Path] = {}
+    runnable: List[Tuple[str, Path]] = []
+    for key, path in tasks:
+        account_key = confgen.account_key_of(key, path)
+        if account_key:
+            if account_key in seen_accounts:
+                console.print(
+                    f"[yellow]跳过重复账号配置 {escape(path.name)}"
+                    f"（与 {seen_accounts[account_key].name} 同账号，只跑首个）。[/yellow]"
+                )
+                continue
+            seen_accounts[account_key] = path
+        runnable.append((key, path))
+    tasks = runnable
 
     pending = list(tasks)
     failed: list = []
