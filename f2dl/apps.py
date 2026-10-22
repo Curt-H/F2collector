@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 from typing import Optional, Tuple
+from urllib.parse import urlparse
 
 #: 工具根目录（F2test）
 TOOL_ROOT = Path(__file__).resolve().parent.parent
@@ -120,3 +121,77 @@ def canonical_user_url(platform_key: str, url: str) -> Optional[Tuple[str, str]]
     if platform_key == "douyin":
         return key, _DOUYIN_USER_URL.format(sec_uid=key)
     return None
+
+
+# ── 链接合规检查（Q-URLCHECK，2026-10-13）─────────────────────────────
+# 用户粘贴的链接先验后用：非抖音链接（B站/微博/TikTok 等、仿冒域名、
+# 非 URL 纯文本）在输入处直接拒绝，避免白白等待 cookie 抓取（5~12s）
+# 与浏览器启动后才在 f2 阶段报错。
+
+#: 各平台允许的根域名（含其全部子域）。抖音域名家族与 vendored f2
+#: （f2/apps/douyin/utils.py）实际消费的入口一致：
+#: www.douyin.com 主站 / v.douyin.com 分享短链 / live.douyin.com 直播 /
+#: www.iesdouyin.com 移动分享域。
+_ALLOWED_ROOT_DOMAINS = {
+    "douyin": ("douyin.com", "iesdouyin.com"),
+}
+
+#: 允许的协议（拦截 javascript:/file:/data: 等被当"链接"注入的输入）
+_ALLOWED_SCHEMES = ("http", "https")
+
+#: 带 scheme 的输入形态（直接粘贴常丢协议，需容错补 https://）
+_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://")
+
+
+def _host_matches(host: str, root_domains: tuple) -> bool:
+    """域名精确匹配：host 等于根域名本身，或是其子域（大小写不敏感）。
+
+    禁用子串 `in` 式匹配——`douyin.com.evil.com`、
+    `evil.com/?u=www.douyin.com` 等仿冒形态必须拦下。
+    """
+    host = (host or "").lower().rstrip(".")
+    return any(host == d or host.endswith("." + d) for d in root_domains)
+
+
+def allowed_hosts_label(platform_key: str) -> str:
+    """面向用户的域名白名单描述（错误提示用）。"""
+    return " / ".join(_ALLOWED_ROOT_DOMAINS.get(platform_key, ()))
+
+
+def validate_url(platform_key: str, url: Optional[str]) -> str:
+    """链接合规检查：仅平台合法链接可过（返回规范化后的 URL）。
+
+    校验分层：
+    - 空 / 非 URL 纯文本 → ValueError；
+    - 缺协议（如 www.douyin.com/user/xxx）→ 容错补 https:// 后放行；
+    - 协议非 http/https → ValueError；
+    - 域名不在平台域名家族（他站/仿冒域名）→ ValueError。
+
+    只看域名与 URL 形态，不要求能提取账号标识——v.douyin.com 短链
+    不含 sec_uid 但合法；标识提取 / 短链跳转解析仍由 f2 负责。
+    """
+    raw = (url or "").strip()
+    if not raw:
+        raise ValueError(
+            "链接为空，请粘贴抖音链接（主页 / 单作品 / 分享短链 / 直播等）"
+        )
+    candidate = raw if _SCHEME_RE.match(raw) else f"https://{raw}"
+    parsed = urlparse(candidate)
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+    if scheme not in _ALLOWED_SCHEMES:
+        raise ValueError(f"链接协议仅支持 http/https，检测到: {scheme or '无'}")
+    if not host:
+        raise ValueError(
+            "这看起来不是链接，请粘贴以 http(s):// 开头的完整链接"
+        )
+    root_domains = _ALLOWED_ROOT_DOMAINS.get(platform_key)
+    if root_domains is None:
+        # 平台未配置白名单（预留）：不做域名限制
+        return candidate
+    if not _host_matches(host, root_domains):
+        raise ValueError(
+            f"不是抖音链接：检测到域名 {host}，"
+            f"仅支持 {allowed_hosts_label(platform_key)}（及其子域）的链接"
+        )
+    return candidate

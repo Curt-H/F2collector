@@ -15,6 +15,10 @@ from pathlib import Path
 TOOL_ROOT = Path(__file__).resolve().parents[1]  # scripts/ 下上跳一级到仓库根
 sys.path.insert(0, str(TOOL_ROOT))
 
+from utils.pw_runtime import use_project_browsers  # noqa: E402
+
+use_project_browsers()  # 项目内置 ms-playwright\ 内核存在时优先使用（便携化）
+
 warnings.filterwarnings("ignore", category=Warning)
 try:
     sys.stdout.reconfigure(encoding="utf-8")

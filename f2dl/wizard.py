@@ -3,8 +3,10 @@
 菜单：1 新任务下载（含高级设置子菜单） 2 重跑已有任务  3 Cookie 管理  q 退出。
 """
 
+import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import click
 from rich.markup import escape
@@ -13,6 +15,7 @@ from rich.table import Table
 
 from . import confgen, core, console
 from . import cookie as cookie_mod
+from . import nickname as nickname_mod
 from .apps import (
     BROWSERS,
     INTERVAL_MODES,
@@ -21,6 +24,7 @@ from .apps import (
     extract_identifier,
     get_platform,
     sanitize_name,
+    validate_url,
 )
 
 
@@ -72,12 +76,14 @@ def _ask_interval(mode: str) -> str:
             console.print(f"[red]{escape(str(exc))}[/red]")
 
 
-def _ask_name(plat_key: str, url: str, mode: str) -> Optional[str]:
+def _ask_name(plat_key: str, url: str, mode: str, nickname: str = "") -> Optional[str]:
+    """询问任务别名（Q-NICKNAME）：作者昵称清洗名优先作默认，回车采用/输入更改。"""
     extracted = extract_identifier(plat_key, url) or ""
-    fallback = extracted or ("临时配置" if mode == "one" else "需手动输入")
+    default = nickname or extracted
+    fallback = default or ("临时配置" if mode == "one" else "需手动输入")
     while True:
         raw = click.prompt(
-            f"任务别名（回车={fallback}）", default=extracted, show_default=False
+            f"任务别名（回车={fallback}）", default=default, show_default=False
         ).strip()
         if raw:
             try:
@@ -85,8 +91,8 @@ def _ask_name(plat_key: str, url: str, mode: str) -> Optional[str]:
             except ValueError as exc:
                 console.print(f"[red]{escape(str(exc))}[/red]")
                 continue
-        if extracted:
-            return extracted
+        if default:
+            return default
         if mode == "one":
             return None
         console.print("[red]该链接无法自动提取作者标识，请输入一个别名。[/red]")
@@ -109,42 +115,130 @@ def _advanced_menu(plat: dict, current: dict) -> dict:
     return overrides
 
 
+def _handle_duplicate(existing: Path, browser: str) -> None:
+    """新任务撞已入库账号（Q-DEDUP-REV，2026-10-13 用户决策）。
+
+    新任务语义 = 只允许新账号：已入库账号报重复、不再静默复用（旧
+    Q-DEDUP 行为混淆"新建"与"追更"）；就地询问是否直接追更该任务
+    （y = rerun_task 完整追更流程，n = 取消返回）。
+    """
+    console.print(
+        f"[red]重复：该账号已入库为任务「{existing.stem}」，不能重复添加新任务。[/red]"
+    )
+    if not click.confirm("是否直接追更该任务？", default=True):
+        console.print("[yellow]已取消（如需追更请用菜单 2 重跑已有任务）。[/yellow]")
+        return
+    try:
+        rc = core.rerun_task(existing, browser=browser)
+    except (ValueError, FileNotFoundError, OSError, cookie_mod.CookieNotReadyError) as exc:
+        console.print(f"[red]任务未能运行：{escape(str(exc))}[/red]")
+        return
+    if rc != 0:
+        console.print("[red]任务未成功，可返回菜单重试。[/red]")
+
+
+def _run_nickname_probe(plat_key: str, url: str) -> None:
+    """昵称爬取线程体：结果挂到线程对象上，供 join 后读取。"""
+    me = threading.current_thread()
+    try:
+        raw, cleaned, _source = nickname_mod.resolve_nickname(plat_key, url)
+    except Exception:  # noqa: BLE001 - 昵称获取绝不阻塞建任务流程
+        raw, cleaned = "", ""
+    me.nick_raw, me.nick_clean = str(raw or ""), str(cleaned or "")
+
+
+def _start_nickname_probe(plat_key: str, url: str) -> threading.Thread:
+    """Q-NICKNAME-D3（2026-10-15 共识）：后台线程启动昵称爬取。
+
+    与区间/高级设置等用户交互并行，给爬取（10~60 秒）提供缓冲时间。
+    线程必然结束——nickname.resolve_nickname 内部预算兜底（主页通道
+    goto 45s + DOM 轮询 15s；one 模式移动 Feed ≤6s）；daemon=True
+    保证向导中途退出不挂进程。playwright sync 对象与创建线程强耦合
+    （W1 教训）——启动→爬取→关闭全程在本线程内闭环，不跨线程传递。
+    """
+    thread = threading.Thread(
+        target=_run_nickname_probe, args=(plat_key, url), daemon=True
+    )
+    thread.start()
+    return thread
+
+
+def _await_nickname_probe(thread: threading.Thread) -> Tuple[str, str]:
+    """等待后台昵称爬取完成（Q4=A：同步等待就绪，不设额外封顶——线程
+    内部预算即天然上限）。等待期间每 5 秒提示一次进度。返回 (raw, clean)。
+
+    线程异常/失败路径不设属性 → ("", "")，由调用方回退 sec_uid 默认（Q5）。
+    """
+    if thread.is_alive():
+        console.print("[dim]昵称爬取尚未完成，等待中……[/dim]")
+        waited = 0
+        while thread.is_alive():
+            thread.join(timeout=1.0)
+            waited += 1
+            if waited % 5 == 0 and thread.is_alive():
+                console.print(f"[dim]昵称爬取中，已等待 {waited}s……[/dim]")
+    return getattr(thread, "nick_raw", ""), getattr(thread, "nick_clean", "")
+
+
 def _new_task(browser: str) -> None:
     # 工具已单平台特化（PLATFORMS 仅注册 douyin），不再询问平台。
     plat_key = "douyin"
     plat = get_platform(plat_key)
-    url = click.prompt("请粘贴链接").strip()
-    if not url:
-        console.print("[yellow]未输入链接，返回主菜单。[/yellow]")
-        return
+    # Q-URLCHECK：粘贴后立即合规校验，非抖音链接（粘错平台/仿冒域名/
+    # 纯文本）就地红字提示重粘，合法后才继续——避免等待 cookie 抓取与
+    # 浏览器启动后才在 f2 阶段报错。空输入仍返回主菜单。
+    while True:
+        url = click.prompt("请粘贴链接").strip()
+        if not url:
+            console.print("[yellow]未输入链接，返回主菜单。[/yellow]")
+            return
+        try:
+            url = validate_url(plat_key, url)
+            break
+        except ValueError as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            console.print("[dim]请重新粘贴（直接回车留空 = 返回主菜单）。[/dim]")
     mode = _choose_mode(plat)
-    # Q-DEDUP：主页链接先规范化（剥追踪参数）再提前判重——已入库账号直接
-    # 定位已有任务、跳过别名询问（高级设置子菜单也随之带上次值）；core.
-    # run_task 有同一判重的兜底（CLI 路径不经过向导）。one 模式走临时配置
-    # 不落盘，无需核验；提取不出账号标识（如短链）仅提醒。
-    existing_name = ""
+    # Q-DEDUP-REV（2026-10-13 用户决策）：新任务只允许新账号。主页链接先
+    # 规范化（剥追踪参数）再提前判重——已入库账号报重复并就地询问是否
+    # 直接追更，不再静默复用（旧 Q-DEDUP 行为混淆"新建"与"追更"语义）；
+    # core.run_task 有同一判重的兜底（CLI 路径不经过向导）。one 模式走
+    # 临时配置不落盘，无需核验；提取不出账号标识（如短链）仅提醒。
     if mode != "one":
         norm = canonical_user_url(plat_key, url)
         if norm:
             _account_key, url = norm
             existing = confgen.find_conf_by_key(plat_key, _account_key)
             if existing:
-                existing_name = existing.stem
-                console.print(
-                    f"[yellow]该账号已入库为任务「{existing_name}」，"
-                    "本次将复用它追更（不新建重复配置）。[/yellow]"
-                )
+                _handle_duplicate(existing, browser)
+                click.prompt("回车返回主菜单", default="", show_default=False)
+                return
         else:
             console.print("[yellow]无法从链接提取账号标识，将不做重复核验。[/yellow]")
+    # Q-NICKNAME-D3（2026-10-15 共识）：判重通过（必然新账号）后立即
+    # 后台线程启动昵称爬取——与区间/高级设置等用户交互并行，给爬取
+    # （10~60 秒）提供缓冲时间；别名询问挪到流程最后（高级设置之后、
+    # 确认表之前——Q3），届时同步等待爬取就绪（Q4=A）；拿不到昵称 →
+    # 静默回退 sec_uid 标识默认（Q5）。CLI 路径保持串行现状（Q6）。
+    nick_probe = _start_nickname_probe(plat_key, url)
     interval = _ask_interval(mode)
-    if existing_name:
-        name = existing_name
-    else:
-        name = _ask_name(plat_key, url, mode)
-    current = confgen.last_values(plat_key, name) if name else {}
     overrides = {}
     if click.confirm("进入高级设置？", default=False):
-        overrides = _advanced_menu(plat, current)
+        # F4：Q-DEDUP-REV 后走到这里的必然是新账号，last_values 恒空
+        # ——高级设置用官方默认，与后置的别名无数据依赖。
+        overrides = _advanced_menu(plat, {})
+    raw_nick, nick_clean = _await_nickname_probe(nick_probe)
+    if nick_clean:
+        console.print(f"[green]已获取作者昵称：{escape(raw_nick)}[/green]")
+        if nick_clean != raw_nick:
+            console.print(
+                f"[dim]昵称含特殊字符/emoji，清洗后作为默认别名：{escape(nick_clean)}[/dim]"
+            )
+    else:
+        console.print(
+            "[dim]未能从用户主页获取昵称，别名可手动输入，或回车用链接标识。[/dim]"
+        )
+    name = _ask_name(plat_key, url, mode, nickname=nick_clean)
 
     table = Table(show_header=False, box=None, pad_edge=False)
     table.add_row("平台", f"{plat['label']} ({plat_key})")

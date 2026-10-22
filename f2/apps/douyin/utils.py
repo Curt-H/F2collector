@@ -1621,6 +1621,45 @@ def create_or_rename_user_folder(
     Returns:
         user_path (Path): 用户目录路径 (User directory path)
     """
+    # 本地补丁(f2dl, DIR-ALIAS/DIR-SEQ 2026-10-15 用户决策)：任务别名优先
+    # ——f2dl 编排层把"序号-任务别名"写入配置(task_alias 键，如
+    # "01-小水一号")，下载目录名与作者昵称变化解耦（昵称改版/带 emoji
+    # 的原始昵称不再影响目录名），并跳过下方"昵称变化触发改名"的既有
+    # 逻辑。存量迁移回退链：目标目录不存在时，目录可能处于历史命名阶段
+    # ——无序号纯别名（DIR-ALIAS 遗留）或原始昵称（更早存量）——逐级
+    # 尝试 rename 为最终"序号-别名"目录，已下载文件的"按存在性跳过"在
+    # 迁移后照常生效，不重下。全部候选迁移失败（占用/权限）→ 回退昵称
+    # 目录行为，任务不中断。无 task_alias 键（官方 f2 / one 模式临时
+    # 配置）→ 维持既有昵称行为，零破坏。
+    alias = str((kwargs or {}).get("task_alias") or "").strip()
+    if alias:
+        base_path = Path(kwargs.get("path", "Download"))
+        alias_path = (base_path / alias).resolve()
+        if alias_path.exists():
+            # 别名目录已存在 → 直接复用（幂等：重跑不重复迁移）
+            return alias_path
+        index_match = re.match(r"^\d+-(.+)$", alias)
+        candidates = ([index_match.group(1)] if index_match else []) + [
+            str(current_nickname)
+        ]
+        for candidate in candidates:
+            old_path = (base_path / candidate).resolve()
+            if old_path.exists() and old_path != alias_path:
+                try:
+                    return rename_user_folder(old_path, alias)
+                except OSError as exc:
+                    logger.warning(
+                        _("目录「{0}」迁移失败（{1}），尝试下一候选……").format(
+                            candidate, exc
+                        )
+                    )
+        # 无可迁移目录（全新任务）→ 新建别名目录；迁移全败 → 回退昵称目录
+        if any(
+            (base_path / c).resolve().exists() for c in candidates
+        ):
+            return create_user_folder(kwargs, current_nickname)
+        return create_user_folder(kwargs, alias)
+
     user_path = create_user_folder(kwargs, current_nickname)
 
     if not local_user_data:

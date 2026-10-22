@@ -21,6 +21,7 @@ from rich.markup import escape
 from . import confgen, runner
 from . import console
 from . import cookie as cookie_mod
+from . import nickname as nickname_mod
 from .apps import (
     INTERVAL_MODES,
     PLATFORMS,
@@ -29,6 +30,7 @@ from .apps import (
     extract_identifier,
     get_platform,
     sanitize_name,
+    validate_url,
 )
 
 _INTERVAL_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\|\d{4}-\d{2}-\d{2}$")
@@ -135,10 +137,25 @@ def _batch_get_cookie(platform_key: str, browser: str) -> str:
 
 
 def resolve_name(platform_key: str, url: str, name: str, mode: str) -> Tuple[Optional[str], str]:
-    """解析任务名（Q13：别名优先，缺省自动提取；one 模式允许无名 → 临时配置）。"""
+    """解析任务名（Q13：别名优先，缺省自动提取；one 模式允许无名 → 临时配置）。
+
+    Q-NICKNAME：未显式给名时优先采用作者昵称（主页链接走本地缓存零成本；
+    one 模式单作品链接另有移动 Feed 免 cookie 在线探测，短超时 fail-fast），
+    清洗掉 emoji/特殊字符后作任务名；昵称拿不到 → sec_uid 标识（既有行为）。
+    """
     extracted = extract_identifier(platform_key, url) or ""
     if name:
         return sanitize_name(name), extracted
+    try:
+        raw_nick, nick_clean, _source = nickname_mod.resolve_nickname(platform_key, url)
+    except Exception:  # noqa: BLE001 - 昵称获取绝不阻塞任务
+        raw_nick = nick_clean = ""
+    if nick_clean:
+        console.print(
+            f"[dim]已自动采用作者昵称「{escape(raw_nick)}」作为任务别名"
+            "（可用 -n/--name 覆盖）。[/dim]"
+        )
+        return nick_clean, extracted
     if extracted:
         return extracted, extracted
     if mode == "one":
@@ -323,6 +340,10 @@ def run_task(
     plat = get_platform(platform_key)
     if not url:
         raise ValueError("缺少下载链接（-u/--url）")
+    # Q-URLCHECK：链接合规兜底——非抖音链接（粘错平台/仿冒域名/非 URL
+    # 纯文本）在 cookie 抓取前直接拒绝并给出可读错误（CLI 路径经
+    # cli.py 统一转红字 + exit 2；向导路径已在粘贴处提前校验）。
+    url = validate_url(platform_key, url)
     if mode not in plat["modes"]:
         raise ValueError(
             f"平台 {platform_key} 不支持模式 {mode}（可用：{'/'.join(plat['modes'])}）"
@@ -332,26 +353,23 @@ def run_task(
     # Q17：one 模式一律用临时配置（即使能提取到作品 id 也不入库）
     is_temp = mode == "one"
 
-    # ── 以账号主页为标准的防重复（Q-DEDUP，2026-09-22 共识）──
-    # 主页链接先规范化（剥追踪参数）再判重/落盘；同账号已有任务 → 复用：
-    # 切换到已有任务名，last_run 与自定义设置由下方既有逻辑保留（幂等
-    # 追更，FOLLOW-1 批量粘贴场景重复提交无害）；别名被其他账号占用 →
-    # 自动加 -1/-2 后缀，不再静默覆盖。one 模式走临时配置不落盘，不参与。
+    # ── 以账号主页为标准的防重复（Q-DEDUP → Q-DEDUP-REV，2026-10-13）──
+    # 主页链接先规范化（剥追踪参数）再判重/落盘。新任务只允许新账号：
+    # 同账号已有任务 → 报重复拒绝（CLI 红字 + exit 2），不再静默复用/
+    # 更新——旧 Q-DEDUP"幂等复用"行为混淆"新建"与"追更"语义；追更请
+    # 走 rerun_task / rerun-all。别名被其他账号占用 → 自动加 -1/-2 后缀，
+    # 不静默覆盖。one 模式走临时配置不落盘，不参与。
     if not is_temp:
         norm = canonical_user_url(platform_key, url)
         if norm:
             account_key, url = norm
             existing = confgen.find_conf_by_key(platform_key, account_key)
-            if existing and (
-                task_name is None
-                or existing != confgen.conf_path(platform_key, task_name)
-            ):
-                console.print(
-                    f"[yellow]该账号已入库为任务「{existing.stem}」，"
-                    "复用它追更，不新建重复配置。[/yellow]"
+            if existing:
+                raise ValueError(
+                    f"该账号已入库为任务「{existing.stem}」，不能重复添加"
+                    "（如需追更请重跑该任务：向导菜单 2，或 rerun-all 批量追更）"
                 )
-                task_name = existing.stem
-            elif task_name is not None:
+            if task_name is not None:
                 target = confgen.conf_path(platform_key, task_name)
                 if target.exists():
                     prev_key = confgen.account_key_of(platform_key, target)
@@ -407,9 +425,15 @@ def run_task(
     if not gen_only:
         cookie = _obtain_cookie(platform_key, browser, interactive=interactive)
         extra_args = [*extra_args, "--cookie", cookie]
+    # DIR-SEQ（2026-10-15 用户决策）：下载目录名 = 序号-别名（追加式分配，
+    # 写入配置即固化）；one 模式临时配置不写 → 引擎回退作者昵称目录。
+    task_alias = None
+    if not is_temp and task_name:
+        task_alias = f"{confgen.next_task_index(platform_key):02d}-{task_name}"
     conf = confgen.build_conf(
         platform_key, url=url, mode=mode, cookie="", interval=interval,
         overrides=overrides,
+        task_alias=task_alias,
     )
 
     if is_temp:
@@ -583,6 +607,20 @@ def rerun_task(
         )
     # Q2b：新 cookie 走 CLI 直传，配置文件里的 cookie 字段保持为空
     extra_args = [*extra_args, "--cookie", cookie]
+    # DIR-ALIAS / DIR-SEQ（2026-10-15 用户决策）：重跑任务注入
+    # task_alias = "序号-任务名"——存量配置无此字段，首次重跑补写（幂等，
+    # 序号追加式分配即固化）；下载目录名统一为"序号-别名"，引擎侧按
+    # 回退链（无序号纯别名目录 → 旧昵称目录）一次性 rename 迁移（已下载
+    # 文件按存在性跳过不受影响）。增量模式用真实配置直接生效；全量模式
+    # 的临时副本深拷贝自本 data，同样带上。
+    if not section.get("task_alias"):
+        idx = confgen.next_task_index(platform_key)
+        section["task_alias"] = f"{idx:02d}-{conf_file.stem}"
+        confgen.save_conf(conf_file, data)
+        console.print(
+            f"[dim]已注入下载目录序号别名：{section['task_alias']}"
+            "（首次重跑将把旧目录改名迁移，已下载文件不受影响）[/dim]"
+        )
     console.rule(f"重跑任务 · {conf_file.name}")
     try:
         rc = _run_with_retry(

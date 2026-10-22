@@ -2,6 +2,7 @@
 
 import copy
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -46,8 +47,15 @@ def build_conf(
     cookie: str,
     interval: str = "all",
     overrides: Optional[dict] = None,
+    task_alias: Optional[str] = None,
 ) -> dict:
-    """构造完整任务配置：官方默认为底稿，显式写入任务字段与高级设置值。"""
+    """构造完整任务配置：官方默认为底稿，显式写入任务字段与高级设置值。
+
+    task_alias（DIR-ALIAS，2026-10-15 用户决策）：任务别名写入配置——
+    引擎（f2/apps/douyin/utils.create_or_rename_user_folder 本地补丁）
+    优先用它作下载目录名，与作者昵称变化解耦；one 模式（临时配置）/
+    无别名不写该键 → 引擎回退昵称目录行为。
+    """
     plat = get_platform(platform_key)
     section = copy.deepcopy(official_defaults(platform_key))
     section.update(
@@ -61,6 +69,8 @@ def build_conf(
             "interval": interval if mode in INTERVAL_MODES else "all",
         }
     )
+    if task_alias:
+        section["task_alias"] = task_alias
     # 官方默认里布尔/数值键为空值；填入约定默认值，让配置文件所见即所得。
     # （f2 的 merge_config 会跳过空值，空键不会遮蔽包内低频默认——源码已核实。）
     for key, _kind, _label, default in plat["advanced"]:
@@ -152,3 +162,30 @@ def next_free_name(platform_key: str, base: str) -> str:
     while conf_path(platform_key, f"{base}-{n}").exists():
         n += 1
     return f"{base}-{n}"
+
+
+# ── DIR-SEQ（2026-10-15 用户决策）：下载目录名 = 序号-别名 ────────────
+
+#: task_alias 的序号前缀（如 "01-小水一号" → 1）
+_TASK_INDEX_RE = re.compile(r"^(\d+)-")
+
+
+def next_task_index(platform_key: str) -> int:
+    """扫描任务配置，取 task_alias 序号前缀的最大值 + 1（无任何序号 → 1）。
+
+    追加式分配（用户决策）：新任务/存量任务首次落 alias 时取当前最大 +1，
+    分配即固化写入配置，永不复用已删任务的空缺序号（简单且零连锁迁移）；
+    rerun-all 批量时任务按文件名顺序依次获得 01..NN。坏配置静默跳过。
+    """
+    plat = get_platform(platform_key)
+    best = 0
+    if plat["conf_dir"].exists():
+        for path in sorted(plat["conf_dir"].glob("*.yaml")):
+            try:
+                section = (load_conf(path) or {}).get(plat["app"]) or {}
+            except Exception:  # noqa: BLE001 - 坏配置不阻塞序号扫描
+                continue
+            m = _TASK_INDEX_RE.match(str(section.get("task_alias") or ""))
+            if m:
+                best = max(best, int(m.group(1)))
+    return best + 1
