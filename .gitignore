@@ -6,6 +6,8 @@ __pycache__/
 
 # ---- Runtime data: contains cookies & personal data, NEVER commit ----
 python/
+# Playwright Firefox 内核（便携化：install_browser.bat 安装；~90MB 不进 git）
+ms-playwright/
 dy/
 wb/
 Download/

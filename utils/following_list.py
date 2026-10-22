@@ -26,8 +26,16 @@ from datetime import datetime
 from pathlib import Path
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
-if str(TOOL_ROOT) not in sys.path:
-    sys.path.insert(0, str(TOOL_ROOT))
+UTILS_DIR = Path(__file__).resolve().parent
+# pw_runtime 位于 utils\ 目录：脚本直跑时 Python 自动带脚本目录，
+# 但 importlib 按路径加载（如离线测试）不会——两个目录都挂上才 import-safe
+for _p in (str(TOOL_ROOT), str(UTILS_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from pw_runtime import use_project_browsers  # noqa: E402
+
+use_project_browsers()  # 项目内置 ms-playwright\ 内核存在时优先使用（便携化）
 
 from f2.apps.douyin.utils import SecUserIdFetcher  # noqa: E402
 from f2dl import cookie as cookie_mod  # noqa: E402
@@ -120,14 +128,63 @@ def accumulate(pages):
     return items, total, status_first
 
 
+def _wait_stat_hydrated(page, timeout_ms: int = 30_000) -> bool:
+    """等待「关注」统计块水合完成（数字出现）。返回是否等到。
+
+    2026-10 改版后统计块的数字由异步接口后填，未水合的块点击是死点击
+    （Playwright 报成功但点击处理器尚未挂载）。
+    """
+    try:
+        page.wait_for_function(
+            """() => {
+                const el = document.querySelector('[data-e2e="user-info-follow"]');
+                return el && /\\d/.test(el.innerText);
+            }""",
+            timeout=timeout_ms,
+        )
+        return True
+    except Exception:  # noqa: BLE001 - 超时仍继续尝试点击，由外层判定
+        return False
+
+
+def _dismiss_trust_dialog(page) -> None:
+    """关闭「是否保存登录信息」信任弹窗——其遮罩会拦截页面一切点击。"""
+    try:
+        cancel = page.locator(
+            "#trust-logout-dialog .trust-login-dialog-button-cancel"
+        )
+        if cancel.count():
+            cancel.first.click(timeout=2000)
+            page.wait_for_timeout(800)
+    except Exception:  # noqa: BLE001 - 弹窗不存在或已关则跳过
+        pass
+
+
 def _open_following_modal(page) -> bool:
     """多策略点开主页上的“关注”弹层。返回是否点击成功
     （是否真出数据由外层按拦截响应判定）。"""
-    # 策略1：常见 data-e2e 命名
+    # 前置：统计块水合 + 清掉信任弹窗遮罩（2026-10 改版必备）
+    _wait_stat_hydrated(page)
+    _dismiss_trust_dialog(page)
+    # 策略1：统计块内精确文本「关注」标签。
+    # 2026-10 改版后数字与标签分离渲染（无任何元素同时含两者），
+    # 点击处理器挂在标签侧——点块中心/数字区均为死点击。
+    try:
+        label = (
+            page.locator('[data-e2e="user-info-follow"]')
+            .first.get_by_text("关注", exact=True)
+            .first
+        )
+        if label.count():
+            label.click(timeout=3000)
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    # 策略2：其他常见 data-e2e 命名（旧版路径，留作回退）
     for sel in (
-        '[data-e2e="user-info-follow"]',
         '[data-e2e="following-list"]',
         '[data-e2e="user-following"]',
+        '[data-e2e="user-info-follow"]',
     ):
         try:
             el = page.locator(sel).first
@@ -136,7 +193,7 @@ def _open_following_modal(page) -> bool:
                 return True
         except Exception:  # noqa: BLE001 - 选择器未命中换下一个
             continue
-    # 策略2：文本匹配“N 关注 / 关注 N”
+    # 策略3：文本匹配“N 关注 / 关注 N”（数字与标签同元素的旧版渲染）
     for pat in (r"^\d[\d万.,]*\s*关注\s*$", r"^关注\s*\d[\d万.,]*\s*$"):
         try:
             el = page.get_by_text(re.compile(pat)).first

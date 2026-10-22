@@ -30,6 +30,8 @@ cd f2dl
 pip install -r requirements.txt
 ```
 
+作品列表下载走 Firefox 真实浏览器通道（Playwright），其浏览器内核（约 90MB）不随 git 仓库分发：克隆后双击仓库根的 `install_browser.bat` 装进项目目录 `ms-playwright\`（等价手动命令：`$env:PLAYWRIGHT_BROWSERS_PATH = "<仓库根>\ms-playwright"; python -m playwright install firefox`）。运行时代码自动优先使用项目内内核，缺失时回退系统目录——**整个项目目录（含便携 `python\` 环境与 `ms-playwright\` 内核）直接拷贝到任何电脑均可使用**。
+
 ## 使用
 
 ```powershell
@@ -58,6 +60,7 @@ python app.py -u "<链接>" -M post --gen-only   # 仅生成配置不下载
 | `f2dl/` | 工具本体 |
 | `scripts\` | 探针与验证/e2e 脚本（诊断用手动运行） |
 | `utils\` | 实用工具（如关注列表导出，手动运行） |
+| `ms-playwright\` | Playwright Firefox 内核（便携化；`install_browser.bat` 安装，缺失时自动回退系统目录） |
 | `Download\` | 下载输出 |
 | `logs\` | f2 运行日志（排障用） |
 

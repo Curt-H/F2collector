@@ -42,14 +42,25 @@ UserPostFilter 解析。
 
 
 import asyncio
+import os
 import random
 import re
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from f2.exceptions.api_exceptions import APIError
 from f2.log.logger import logger
 from f2.i18n.translator import _
+
+# --- 便携内核定位（f2dl 本地补丁）---
+# 项目把 Firefox 内核随仓库放在 <仓库根>\ms-playwright\（install_browser.bat
+# 安装）。存在则在驱动进程启动前指过去，整个项目目录拷到任何电脑即可用；
+# 不存在时静默回退系统默认（%LOCALAPPDATA%\ms-playwright），零破坏。
+# 自包含实现（不 import 项目根 utils）：f2 为 vendored 包，保持低耦合。
+_PROJECT_BROWSERS_DIR = Path(__file__).resolve().parents[3] / "ms-playwright"
+if _PROJECT_BROWSERS_DIR.is_dir() and any(_PROJECT_BROWSERS_DIR.glob("firefox-*")):
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_PROJECT_BROWSERS_DIR))
 
 #: 拦截的作品列表接口 path(Argus 门禁接口,由页面 JS 现场签名发起)
 _POST_PATH_MARK = "/aweme/v1/web/aweme/post/"

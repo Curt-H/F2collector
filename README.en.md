@@ -25,6 +25,8 @@ cd f2dl
 pip install -r requirements.txt
 ```
 
+The Firefox kernel used by the browser channel (Playwright, ~90MB) is not shipped with the git repo. After cloning, run `install_browser.bat` at the repo root once to install it into `ms-playwright\` inside the project. At runtime the code auto-detects the in-project kernel (`utils\pw_runtime.py`) and falls back to the system default when missing — so a full project-directory copy (including the portable `python\` env and the `ms-playwright\` kernel) works on any computer as-is.
+
 ## Usage
 
 ```powershell
@@ -52,6 +54,7 @@ python app.py -u "<link>" -M post --gen-only   # generate config only
 | `f2/` | Vendored f2 engine (with local patches, do not edit) |
 | `f2dl/` | The tool itself |
 | `utils/` | Utility tools (e.g. following-list export; run manually) |
+| `ms-playwright\` | Playwright Firefox kernel (portable; installed by `install_browser.bat`, falls back to the system dir if missing) |
 | `dy\` | Runtime dirs: cookies, task configs (contain personal data — gitignored) |
 | `Download\` | Download output |
 | `logs\` | f2 runtime logs (for troubleshooting) |
