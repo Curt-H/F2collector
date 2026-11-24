@@ -83,7 +83,17 @@ def rerun_all_cmd():
             show_default=False,
         )
         update_mode = "incremental" if choice == "1" else "full"
-    sys.exit(core.rerun_all(update_mode=update_mode))
+    try:
+        sys.exit(core.rerun_all(update_mode=update_mode))
+    except KeyboardInterrupt:
+        # CRASH-1 同批改动（2026-11-09）：403 重试提示明确承诺"期间可 Ctrl+C
+        # 退出"，此前这里没接住会吐裸 traceback。cookie 清理由 rerun_all 的
+        # finally 保证（无论成败/中断），此处只需优雅收尾。
+        console.print(
+            "\n[yellow]已取消批量追更：已完成任务与 .tmp 断点不受影响，"
+            "重跑 [cyan]python app.py rerun-all[/cyan] 会自动补拉。[/yellow]"
+        )
+        sys.exit(130)
 
 
 @main.command("cookie")

@@ -10,6 +10,7 @@ import re
 import sys
 import time
 import random
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -657,6 +658,32 @@ def rerun_task(
     return rc
 
 
+def _dump_crash_log(task_path: Optional[Path], exc: BaseException) -> Optional[Path]:
+    """未捕获异常完整 traceback 落盘（CRASH-1，2026-11-09）。
+
+    先落盘、后打印：2026-11-09 11:42 事故中批量进程死在 traceback 打印
+    中途（内存/页面瞬时故障），异常类型永久不可考——本函数保证只要磁盘
+    还能写，全尸一定留底。写入自身失败返回 None，绝不向上抛（不能掩盖
+    原始异常）。
+    """
+    try:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        name = task_path.stem if task_path is not None else "batch"
+        crash_dir = TOOL_ROOT / "logs"
+        crash_dir.mkdir(parents=True, exist_ok=True)
+        text = (
+            f"time={_now_str()}\n"
+            f"task={task_path}\n"
+            f"exception={type(exc).__name__}: {exc}\n\n"
+            + "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        )
+        out = crash_dir / f"crash_{name}_{stamp}.log"
+        out.write_text(text, encoding="utf-8")
+        return out
+    except Exception:  # noqa: BLE001 - 落盘失败不能掩盖原始异常
+        return None
+
+
 def rerun_all(update_mode: Optional[str] = None) -> int:
     """批量追更全部任务（dy→wb 顺序），任务间随机冷却，单个失败不中断。
 
@@ -745,11 +772,32 @@ def rerun_all(update_mode: Optional[str] = None) -> int:
                             "[cyan]python app.py rerun-all[/cyan] 即可（已完成的不会重复下载）。[/yellow]"
                         )
                     return 1
-                except (ValueError, OSError) as exc:
-                    console.print(f"[red]任务无法运行：{escape(str(exc))}[/red]")
+                except Exception as exc:  # noqa: BLE001 - 批次兜底(CRASH-1, 2026-11-09)
+                    # 事故背景（2026-11-09 11:42）：重试轮 pending 的元组结构
+                    # bug 抛 TypeError 直接炸掉整批——非 (ValueError, OSError)
+                    # 异常此前无任何兜底（该 bug 已在同批修复，见 failed.append）。
+                    # 本分支为防御纵深：未知异常一律先完整落盘 logs/crash_*.log
+                    # （先落盘后打印），单行提示后任务计失败、批次继续。
+                    # ValueError/OSError 的原有语义（提示后计失败）一并并入；
+                    # KeyboardInterrupt 等 BaseException 不在此列，仍向上冒泡
+                    # 走 cli 层的优雅取消路径。
+                    crash_path = _dump_crash_log(path, exc)
+                    where = (
+                        f"，完整 traceback 已写入 {escape(str(crash_path))}"
+                        if crash_path is not None
+                        else "（traceback 落盘失败）"
+                    )
+                    console.print(
+                        f"[red]任务异常（{escape(type(exc).__name__)}）："
+                        f"{escape(str(exc) or '(无描述)')}{where}；任务计失败，批次继续。[/red]"
+                    )
                     rc = 1
                 if rc != 0:
-                    failed.append(path)
+                    # 修复（2026-11-09 11:42 事故根因）：此前 append 的是裸
+                    # path，丢掉了平台键——下一轮 for i, (_key, path) 解包
+                    # Path 直接 TypeError，凡第 1 轮有失败的批次第 2 轮必炸
+                    # 整批（今日与 11/3 两次崩溃均由此而来）。
+                    failed.append((_key, path))
             pending = failed
     finally:
         # 批次结束（含中止/异常路径）统一清理：内存缓存 + 落盘存储，
@@ -763,7 +811,7 @@ def rerun_all(update_mode: Optional[str] = None) -> int:
         console.print(
             f"[red]历经 {round_no} 轮，仍有 {len(failed)}/{len(tasks)} 个任务未成功：[/red]"
         )
-        for p in failed:
+        for _failed_key, p in failed:
             console.print(f"  [dim]· {escape(str(p))}[/dim]")
         console.print(
             "[yellow]失败任务已保留 .tmp 断点，稍后可单独重跑补齐。[/yellow]"

@@ -1020,3 +1020,79 @@ def test_rerun_task_injects_task_alias(monkeypatch, tmp_path):
     assert core.rerun_task(conf, interactive=False) == 0
     data = yaml.safe_load(conf.read_text(encoding="utf-8"))
     assert data["douyin"]["task_alias"] == "01-旧任务"
+
+
+# ── rerun_all 批次兜底与崩溃落盘（CRASH-1，2026-11-09 事故复盘）─────────
+
+
+def test_dump_crash_log_writes_full_traceback(monkeypatch, tmp_path):
+    """_dump_crash_log：完整 traceback 落盘（time/task/exception 头 + 全栈）。"""
+    monkeypatch.setattr(core, "TOOL_ROOT", tmp_path)
+    try:
+        raise ValueError("模拟爆炸")
+    except ValueError as exc:
+        path = core._dump_crash_log(Path("t/任务甲.yaml"), exc)
+    assert path is not None and path.exists()
+    text = path.read_text(encoding="utf-8")
+    assert "任务甲.yaml" in text
+    assert "exception=ValueError: 模拟爆炸" in text
+    assert "Traceback (most recent call last):" in text
+    assert "test_dump_crash_log_writes_full_traceback" in text  # 栈帧在内
+
+
+def test_dump_crash_log_never_raises(monkeypatch, tmp_path):
+    """落盘自身失败（目标路径被同名文件占据）返回 None，绝不上抛掩盖原始异常。"""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x", encoding="utf-8")
+    monkeypatch.setattr(core, "TOOL_ROOT", blocker)  # blocker 是文件 → mkdir 失败
+    assert core._dump_crash_log(None, ValueError("原始异常")) is None
+
+
+def test_rerun_all_unknown_exception_contained(monkeypatch, tmp_path):
+    """未知异常（MemoryError 等）不再炸整批：落盘 crash 日志、任务计失败、
+    三轮重试跑满、返回非零（2026-11-09 11:42 事故修复）。"""
+    monkeypatch.setitem(apps.PLATFORMS["douyin"], "conf_dir", tmp_path)
+    sec = "MS4wLjABAAAA" + "m" * 20
+    confgen.save_conf(
+        tmp_path / "任务甲.yaml", {"douyin": {"url": f"https://www.douyin.com/user/{sec}"}}
+    )
+    monkeypatch.setattr(core, "_BATCH_COOKIE_CACHE", {})
+    monkeypatch.setattr(cookie_mod, "clear_cookie", lambda pk: None)
+    monkeypatch.setattr(core.time, "sleep", lambda s: None)  # 跳过轮间/风控冷却
+    dumped = []
+
+    def fake_dump(task_path, exc):
+        dumped.append(exc)
+        return tmp_path / "crash_任务甲.log"
+
+    monkeypatch.setattr(core, "_dump_crash_log", fake_dump)
+    calls = []
+
+    def fake_rerun_task(path, **kw):
+        calls.append(Path(path).name)
+        raise MemoryError("模拟 2026-11-09 内存故障")
+
+    monkeypatch.setattr(core, "rerun_task", fake_rerun_task)
+    rc = core.rerun_all(update_mode="incremental")
+    assert rc == 1
+    assert calls == ["任务甲.yaml"] * 3  # 3 轮全部执行（每轮都失败）
+    assert len(dumped) == 3 and isinstance(dumped[0], MemoryError)
+
+
+def test_rerun_all_keyboardinterrupt_still_propagates(monkeypatch, tmp_path):
+    """KeyboardInterrupt（BaseException）不被批次兜底吞掉：向上冒泡走优雅取消。"""
+    monkeypatch.setitem(apps.PLATFORMS["douyin"], "conf_dir", tmp_path)
+    sec = "MS4wLjABAAAA" + "n" * 20
+    confgen.save_conf(
+        tmp_path / "任务乙.yaml", {"douyin": {"url": f"https://www.douyin.com/user/{sec}"}}
+    )
+    monkeypatch.setattr(core, "_BATCH_COOKIE_CACHE", {})
+    monkeypatch.setattr(cookie_mod, "clear_cookie", lambda pk: None)
+    monkeypatch.setattr(core.time, "sleep", lambda s: None)
+
+    def fake_rerun_task(path, **kw):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(core, "rerun_task", fake_rerun_task)
+    with pytest.raises(KeyboardInterrupt):
+        core.rerun_all(update_mode="incremental")

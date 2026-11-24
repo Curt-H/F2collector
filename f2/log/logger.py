@@ -147,8 +147,9 @@ def log_setup(log_to_console=True):
         level=logging.INFO, log_to_console=log_to_console, log_path=temp_log_dir
     )
 
-    # 只保留99个日志文件
-    log_manager.clean_logs(99)
+    # 只保留 400 个日志文件（2026-11-09 由 99 上调：一天批量追更即可产生
+    # 90+ 个日志，99 会把当天早段任务的日志自动清掉，事后排查受阻）
+    log_manager.clean_logs(400)
 
     return logger
 
